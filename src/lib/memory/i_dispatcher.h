@@ -4,7 +4,7 @@
 
 namespace NMemory {
 
-class IManager : public IDevice {
+class IDispatcher : public IDevice {
 public:
     virtual void AddDevice(IDevice* device, TAddressRange range) = 0;
 };

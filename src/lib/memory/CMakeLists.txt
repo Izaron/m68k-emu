@@ -1,4 +1,4 @@
-add_library(memory STATIC i_device.cpp i_manager.cpp)
+add_library(memory STATIC i_device.cpp i_dispatcher.cpp)
 
 #enable_testing()
 #add_executable(comment_test comment_test.cpp)
