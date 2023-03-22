@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 namespace NRegisters {
 
@@ -43,6 +44,6 @@ struct TRegisters {
     TRegisterType SR;
 };
 
-void Dump(const TRegisters& registers);
+std::string Dump(const TRegisters& registers);
 
 } // namespace NRegisters
