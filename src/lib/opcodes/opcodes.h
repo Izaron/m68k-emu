@@ -8,8 +8,8 @@ namespace NList {
 
 struct NOP {};
 
-using TList = std::variant<NOP>;
-
 } // namespace NList
+
+using TOneOf = std::variant<NList::NOP>;
 
 } // namespace NOpcodes
