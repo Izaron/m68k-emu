@@ -8,21 +8,35 @@ class TTarget {
 public:
     enum EKind : uint8_t {
         DataRegisterKind,
-        AddressRegisterKind,            // TODO
-        AddressKind,                    // TODO
-        AddressIncrementKind,           // TODO
+        AddressRegisterKind,
+        AddressKind,
+        AddressIncrementKind,
         AddressDecrementKind,
-        AddressDisplacementKind,        // TODO
-        AddressIndexKind,               // TODO
-        ProgramCounterDisplacementKind, // TODO
-        ProgramCounterIndexKind,        // TODO
-        AbsoluteShortKind,              // TODO
-        AbsoluteLongKind,               // TODO
-        ImmediateKind,                  // TODO
+        AddressDisplacementKind,
+        AddressIndexKind,
+        ProgramCounterDisplacementKind,
+        ProgramCounterIndexKind,
+        AbsoluteShortKind,
+        AbsoluteLongKind,
+        ImmediateKind,
     };
 
     void SetDataRegister(uint8_t index);
+    void SetAddressRegister(uint8_t index);
+    void SetAddress(uint8_t index);
+    void SetAddressIncrement(uint8_t index);
     void SetAddressDecrement(uint8_t index);
+    void SetAddressDisplacement(uint8_t index, TWord extWord0);
+    void SetAddressIndex(uint8_t index, TWord extWord0);
+    void SetProgramCounterDisplacement(TWord extWord0);
+    void SetProgramCounterIndex(TWord extWord0);
+    void SetAbsoluteShort(TWord extWord0);
+    void SetAbsoluteLong(TWord extWord0, TWord extWord1);
+    void SetImmediate(TLong address);
+
+    // pre-work and post-work
+    void PreWork(NEmulator::TContext ctx);
+    void PostWork(NEmulator::TContext ctx);
 
     // read data methods
     TDataHolder Read(NEmulator::TContext ctx, TAddressType size);
@@ -37,11 +51,11 @@ public:
     void WriteLong(NEmulator::TContext ctx, TLong l);
 
 private:
-    union {
-        uint8_t DataRegisterIndex;
-        uint8_t AddressDecrementIndex;
-    } Value_;
     EKind Kind_;
+    uint8_t Index_;
+    TWord ExtWord0_;
+    TWord ExtWord1_;
+    TLong Address_;
 };
 
 } // namespace NOpcodes

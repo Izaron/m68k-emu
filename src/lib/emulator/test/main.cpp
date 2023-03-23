@@ -37,19 +37,17 @@ public:
     }
 
     TDataHolder Read(TAddressType addr, TAddressType size) override {
-        if (addr == PC_) {
-            if (size != 2) {
-                throw std::runtime_error("why not 2 bytes?");
-            }
+        if (addr >= PC_ && addr + size - PC_ <= 4) {
             TDataHolder res;
-            res.push_back(Prefetch_[0]);
-            res.push_back(Prefetch_[1]);
+            for (int i = 0; i < size; ++i) {
+                res.push_back(Prefetch_[addr + i - PC_]);
+            }
             return res;
         }
 
         TDataHolder res;
         for (int i = addr; i < addr + size; ++i) {
-            if (const auto it = Values_.find(addr & 0xFFFFFF); it != Values_.end()) {
+            if (const auto it = Values_.find(i & 0xFFFFFF); it != Values_.end()) {
                 res.push_back(it->second);
             } else {
                 res.push_back(0);
@@ -162,7 +160,11 @@ bool WorkOnTest(const json& test) {
     auto actualFinal = initial;
     TTestDevice device{initial.PC, initialJson["prefetch"], initialJson["ram"]};
     NEmulator::TContext ctx{.Registers = actualFinal, .Memory = device};
-    NEmulator::Emulate(ctx);
+    try {
+        NEmulator::Emulate(ctx);
+    } catch (...) {
+        return false;
+    }
 
     // TODO: compare RAM
     const auto regsDiff = DumpDiff(expectedFinal, actualFinal);
