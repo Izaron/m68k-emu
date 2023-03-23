@@ -55,8 +55,11 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             }
 
             data.Dst.WriteByte(ctx, result);
+
+            const bool carry = result & (result ^ 0xFF);
             ctx.Registers.SetNegativeFlag(GetMostSignificantBit<TByte>(result));
-            ctx.Registers.SetCarryFlag(result & (result ^ 0xFF));
+            ctx.Registers.SetCarryFlag(carry);
+            ctx.Registers.SetExtendFlag(carry);
             ctx.Registers.SetOverflowFlag((~binaryResult & result & 0x80) != 0);
             ctx.Registers.SetZeroFlag(result == 0);
             break;
