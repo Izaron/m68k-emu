@@ -45,23 +45,38 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             const TByte extendFlag = ctx.Registers.GetExtendFlag();
 
             const TWord binaryResult = srcVal + dstVal + extendFlag;
-            TWord result = (srcVal & 0x0F) + (dstVal & 0x0F) + extendFlag;
-            if (result > 0x09) {
-                result += 0x06;
+
+            bool carry = false;
+            int lval = (srcVal & 0x0F) + (dstVal & 0x0F) + extendFlag;
+            if (lval > 9) {
+                carry = true;
+                lval -= 10;
             }
-            result += (srcVal & 0xF0) + (dstVal & 0xF0);
-            if (result > 0x99) {
-                result += 0x60;
+
+            int hval = ((srcVal >> 4) & 0x0F) + ((dstVal >> 4) & 0x0F) + (carry ? 1 : 0);
+            carry = false;
+
+            if (lval >= 16) {
+                lval -= 16;
+                ++hval;
             }
+
+            if (hval > 9) {
+                carry = true;
+                hval -= 10;
+            }
+
+            const TWord result = ((hval << 4) + lval) & 0xFF;
 
             data.Dst.WriteByte(ctx, result);
 
-            const bool carry = result & (result ^ 0xFF);
             ctx.Registers.SetNegativeFlag(GetMostSignificantBit<TByte>(result));
             ctx.Registers.SetCarryFlag(carry);
             ctx.Registers.SetExtendFlag(carry);
             ctx.Registers.SetOverflowFlag((~binaryResult & result & 0x80) != 0);
-            ctx.Registers.SetZeroFlag(result == 0);
+            if (result != 0) {
+                ctx.Registers.SetZeroFlag(result == 0);
+            }
             break;
         }
     }

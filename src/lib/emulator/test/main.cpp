@@ -30,10 +30,10 @@ public:
         if (prefetch.size() != 2) {
             throw std::runtime_error("why not 2 items?");
         }
-        Prefetch_.push_back(static_cast<TByte>(prefetch[0].get<int>() >> 8));
-        Prefetch_.push_back(static_cast<TByte>(prefetch[0].get<int>() % 256));
-        Prefetch_.push_back(static_cast<TByte>(prefetch[1].get<int>() >> 8));
-        Prefetch_.push_back(static_cast<TByte>(prefetch[1].get<int>() % 256));
+        Prefetch_.push_back(prefetch[0].get<int>() >> 8);
+        Prefetch_.push_back(prefetch[0].get<int>() % 256);
+        Prefetch_.push_back(prefetch[1].get<int>() >> 8);
+        Prefetch_.push_back(prefetch[1].get<int>() % 256);
     }
 
     TDataHolder Read(TAddressType addr, TAddressType size) override {
@@ -52,7 +52,7 @@ public:
             if (const auto it = Values_.find(addr & 0xFFFFFF); it != Values_.end()) {
                 res.push_back(it->second);
             } else {
-                res.push_back(static_cast<TByte>(0));
+                res.push_back(0);
             }
         }
         return res;
@@ -60,8 +60,9 @@ public:
 
     void Write(TAddressType addr, TDataView data) override {
         for (const auto value : data) {
-            if (value != static_cast<TByte>(0)) {
-                Values_[addr & 0xFFFFFF] = value;
+            const auto realAddr = addr & 0xFFFFFF;
+            if (value != 0 || Values_.contains(realAddr)) {
+                Values_[realAddr] = value;
             }
             addr++;
         }
@@ -171,7 +172,7 @@ bool WorkOnTest(const json& test) {
     if (regsDiff || expectedRam != actualRam) {
         std::cerr << "Test name: \"" << test["name"].get<std::string>() << "\"" << std::endl << std::endl;
 
-        if (regsDiff) {
+        if (regsDiff || true) {
             std::cerr << "Initial registers:" << std::endl;
             std::cerr << Dump(initial) << std::endl;
 
@@ -184,7 +185,7 @@ bool WorkOnTest(const json& test) {
             std::cerr << "Differing registers: " << *regsDiff << std::endl << std::endl;
         }
 
-        if (expectedRam != actualRam) {
+        if (expectedRam != actualRam || true) {
             std::cerr << "Initial RAM:" << std::endl;
             std::cerr << DumpRamSnapshot(MakeRamSnapshot(initialJson["ram"])) << std::endl;
 
