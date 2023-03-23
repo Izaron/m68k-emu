@@ -48,6 +48,18 @@ struct TRegisters {
      */
     void SetExtendFlag(bool flag);
     bool GetExtendFlag() const;
+
+    void SetNegativeFlag(bool flag);
+    bool GetNegativeFlag() const;
+
+    void SetZeroFlag(bool flag);
+    bool GetZeroFlag() const;
+
+    void SetOverflowFlag(bool flag);
+    bool GetOverflowFlag() const;
+
+    void SetCarryFlag(bool flag);
+    bool GetCarryFlag() const;
 };
 
 std::string Dump(const TRegisters& registers);

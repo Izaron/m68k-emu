@@ -6,6 +6,23 @@ namespace NOpcodes {
 
 static_assert(std::is_trivially_constructible_v<TInstruction>);
 
+namespace {
+
+template<typename Type, typename Value>
+bool GetMostSignificantBit(Value value) {
+    if constexpr (std::is_same_v<Type, TByte>) {
+        return value & (1 << 7);
+    }
+    else if constexpr (std::is_same_v<Type, TWord>) {
+        return value & (1 << 15);
+    }
+    else if constexpr (std::is_same_v<Type, TLong>) {
+        return value & (1 << 31);
+    }
+}
+
+} // namespace
+
 void TInstruction::SetNop() {
     Kind_ = NopKind;
 }
@@ -37,6 +54,8 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             }
 
             data.Dst.WriteByte(ctx, result);
+            ctx.Registers.SetNegativeFlag(GetMostSignificantBit<TByte>(result));
+            ctx.Registers.SetCarryFlag(result & (result ^ 0xFF));
             break;
         }
     }

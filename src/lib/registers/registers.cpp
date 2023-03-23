@@ -4,17 +4,36 @@
 
 namespace NRegisters {
 
-void TRegisters::SetExtendFlag(bool flag) {
+namespace {
+
+void SetFlag(bool flag, TRegisterType& r, int index) {
     if (flag) {
-        SR |= 1 << 4;
+        r |= 1 << index;
     } else {
-        SR &= SR ^ (1 << 4);
+        r &= r ^ (1 << index);
     }
 }
 
-bool TRegisters::GetExtendFlag() const {
-    return SR & (1 << 4);
+bool GetFlag(TRegisterType r, int index) {
+    return r & (1 << index);
 }
+
+} // namespace
+
+void TRegisters::SetExtendFlag(bool flag) { return SetFlag(flag, SR, 4); }
+bool TRegisters::GetExtendFlag() const { return GetFlag(SR, 4); }
+
+void TRegisters::SetNegativeFlag(bool flag) { return SetFlag(flag, SR, 3); }
+bool TRegisters::GetNegativeFlag() const { return GetFlag(SR, 3); }
+
+void TRegisters::SetZeroFlag(bool flag) { return SetFlag(flag, SR, 2); }
+bool TRegisters::GetZeroFlag() const { return GetFlag(SR, 2); }
+
+void TRegisters::SetOverflowFlag(bool flag) { return SetFlag(flag, SR, 1); }
+bool TRegisters::GetOverflowFlag() const { return GetFlag(SR, 1); }
+
+void TRegisters::SetCarryFlag(bool flag) { return SetFlag(flag, SR, 0); }
+bool TRegisters::GetCarryFlag() const { return GetFlag(SR, 0); }
 
 std::string Dump(const TRegisters& r) {
     std::stringstream ss;
