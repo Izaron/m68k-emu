@@ -39,9 +39,15 @@ struct TRegisters {
 
     /**
      * Status register
-     * TODO: add descrition for each bit?
+     * TODO: add description for each bit?
      */
     TRegisterType SR;
+
+    /**
+     * Status register helpers
+     */
+    void SetExtendFlag(bool flag);
+    bool GetExtendFlag() const;
 };
 
 std::string Dump(const TRegisters& registers);

@@ -4,6 +4,18 @@
 
 namespace NRegisters {
 
+void TRegisters::SetExtendFlag(bool flag) {
+    if (flag) {
+        SR |= 1 << 4;
+    } else {
+        SR &= SR ^ (1 << 4);
+    }
+}
+
+bool TRegisters::GetExtendFlag() const {
+    return SR & (1 << 4);
+}
+
 std::string Dump(const TRegisters& r) {
     std::stringstream ss;
     //ss << std::hex << std::uppercase;
