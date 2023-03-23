@@ -13,10 +13,10 @@ TLong& GetAReg(NRegisters::TRegisters& r, int index) {
         return r.A[index];
     } else {
         if (r.GetSupervisorFlag()) {
-            --r.SSP;
+            //--r.SSP;
             return r.SSP;
         } else {
-            --r.USP;
+            //--r.USP;
             return r.USP;
         }
         //return r.GetSupervisorFlag() ? r.SSP : r.USP;
@@ -50,6 +50,9 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
         case DecAddressRegisterKind: {
             auto& reg = GetAReg(ctx.Registers, Value_.DecAddressRegisterIndex);
             --reg;
+            if (Value_.DecAddressRegisterIndex == 7) {
+                --reg;
+            }
             return ctx.Memory.Read(reg, size);
         }
     }
