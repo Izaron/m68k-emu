@@ -100,7 +100,7 @@ TInstruction TInstruction::Decode(NEmulator::TContext ctx) {
         inst.SetNop();
     }
     else if (applyMask(0b1111'0001'1111'0000) == 0b1100'0001'0000'0000) {
-        const auto func = getBit(3) ? &TTarget::SetDecAddressRegisterKind : &TTarget::SetDataRegister;
+        const auto func = getBit(3) ? &TTarget::SetAddressDecrement : &TTarget::SetDataRegister;
         TTarget src;
         (src.*func)(getBits(0, 3));
         TTarget dst;

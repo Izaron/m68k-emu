@@ -1,6 +1,7 @@
 #include "targets.h"
 
 #include <type_traits>
+#include <stdexcept>
 
 namespace NOpcodes {
 
@@ -30,9 +31,9 @@ void TTarget::SetDataRegister(uint8_t index) {
     Value_.DataRegisterIndex = index;
 }
 
-void TTarget::SetDecAddressRegisterKind(uint8_t index) {
-    Kind_ = DecAddressRegisterKind;
-    Value_.DecAddressRegisterIndex = index;
+void TTarget::SetAddressDecrement(uint8_t index) {
+    Kind_ = AddressDecrementKind;
+    Value_.AddressDecrementIndex = index;
 }
 
 TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
@@ -47,16 +48,18 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
             // TODO: reverse `data`?
             return data;
         }
-        case DecAddressRegisterKind: {
-            auto& reg = GetAReg(ctx.Registers, Value_.DecAddressRegisterIndex);
+        case AddressDecrementKind: {
+            auto& reg = GetAReg(ctx.Registers, Value_.AddressDecrementIndex);
             --reg;
-            if (Value_.DecAddressRegisterIndex == 7) {
+            if (Value_.AddressDecrementIndex == 7) {
                 --reg;
             }
             return ctx.Memory.Read(reg, size);
         }
+        default: {
+            throw std::runtime_error("target not supported");
+        }
     }
-    __builtin_unreachable();
 }
 
 TByte TTarget::ReadByte(NEmulator::TContext ctx) {
@@ -96,9 +99,12 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
             reg |= lsb;
             break;
         }
-        case DecAddressRegisterKind: {
-            const auto reg = GetAReg(ctx.Registers, Value_.DecAddressRegisterIndex);
+        case AddressDecrementKind: {
+            const auto reg = GetAReg(ctx.Registers, Value_.AddressDecrementIndex);
             ctx.Memory.Write(reg, data);
+            break;
+        }
+        default: {
             break;
         }
     }

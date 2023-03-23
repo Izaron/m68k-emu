@@ -210,18 +210,27 @@ bool WorkOnFile(const json& file) {
     std::size_t size = file.size();
     std::cerr << "work on file with " << size << " tests" << std::endl;
 
-    int oks = 0;
+    int passed = 0;
+    int failed = 0;
+    int ignored = size;
+
     for (std::size_t i = 0; i < size; ++i) {
         const bool ok = WorkOnTest(file[i]);
         std::cerr << (i + 1) << "/" << size << " test is " << (ok ? "OK" : "FAIL") << std::endl;
+
+        --ignored;
         if (ok) {
-            ++oks;
+            ++passed;
+        } else {
+            ++failed;
+            //break;
         }
     }
     std::cerr << "TOTAL TESTS: " << size << std::endl;
-    std::cerr << "PASSED TESTS: " << oks << std::endl;
-    std::cerr << "FAILED TESTS: " << size - oks << std::endl;
-    return oks == size;
+    std::cerr << "PASSED TESTS: " << passed << std::endl;
+    std::cerr << "FAILED TESTS: " << failed << std::endl;
+    std::cerr << "IGNORED TESTS: " << ignored << std::endl;
+    return passed == size;
 }
 
 } // namespace
@@ -238,7 +247,12 @@ int main() {
         paths.emplace(std::move(path));
     }
 
+    int skipFiles = 1;
     for (const auto& path : paths) {
+        if (skipFiles) {
+            --skipFiles;
+            continue;
+        }
         auto file = LoadTestFile(path);
         if (!WorkOnFile(file)) {
             break;

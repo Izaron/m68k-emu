@@ -8,11 +8,21 @@ class TTarget {
 public:
     enum EKind : uint8_t {
         DataRegisterKind,
-        DecAddressRegisterKind,
+        AddressRegisterKind,            // TODO
+        AddressKind,                    // TODO
+        AddressIncrementKind,           // TODO
+        AddressDecrementKind,
+        AddressDisplacementKind,        // TODO
+        AddressIndexKind,               // TODO
+        ProgramCounterDisplacementKind, // TODO
+        ProgramCounterIndexKind,        // TODO
+        AbsoluteShortKind,              // TODO
+        AbsoluteLongKind,               // TODO
+        ImmediateKind,                  // TODO
     };
 
     void SetDataRegister(uint8_t index);
-    void SetDecAddressRegisterKind(uint8_t index);
+    void SetAddressDecrement(uint8_t index);
 
     // read data methods
     TDataHolder Read(NEmulator::TContext ctx, TAddressType size);
@@ -29,7 +39,7 @@ public:
 private:
     union {
         uint8_t DataRegisterIndex;
-        uint8_t DecAddressRegisterIndex;
+        uint8_t AddressDecrementIndex;
     } Value_;
     EKind Kind_;
 };
