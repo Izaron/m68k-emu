@@ -1,47 +1,43 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
 #include <string>
 
-namespace NRegisters {
+#include <lib/memory/types.h>
 
-/**
- * Registers are signed 32-bit integers
- */
-using TRegisterType = int32_t;
+namespace NRegisters {
 
 struct TRegisters {
     /**
      * Data registers D0 - D7
      */
-    std::array<TRegisterType, 8> D;
+    std::array<TLong, 8> D;
 
     /**
      * Address registers A0 - A6
      */
-    std::array<TRegisterType, 7> A;
+    std::array<TLong, 7> A;
 
     /**
      * User stack pointer
      */
-    TRegisterType USP;
+    TLong USP;
 
     /**
      * Supervisor stack pointer
      */
-    TRegisterType SSP;
+    TLong SSP;
 
     /**
      * Program counter
      */
-    TRegisterType PC;
+    TLong PC;
 
     /**
      * Status register
      * TODO: add description for each bit?
      */
-    TRegisterType SR;
+    TLong SR;
 
     /**
      * Status register helpers

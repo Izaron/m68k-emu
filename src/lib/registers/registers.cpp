@@ -6,7 +6,7 @@ namespace NRegisters {
 
 namespace {
 
-void SetFlag(bool flag, TRegisterType& r, int index) {
+void SetFlag(bool flag, TLong& r, int index) {
     if (flag) {
         r |= 1 << index;
     } else {
@@ -14,7 +14,7 @@ void SetFlag(bool flag, TRegisterType& r, int index) {
     }
 }
 
-bool GetFlag(TRegisterType r, int index) {
+bool GetFlag(TLong r, int index) {
     return r & (1 << index);
 }
 

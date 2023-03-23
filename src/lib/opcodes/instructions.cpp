@@ -42,8 +42,9 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             auto& data = Value_.AbcdData;
             const TByte srcVal = data.Src.ReadByte(ctx);
             const TByte dstVal = data.Dst.ReadByte(ctx);
-
             const TByte extendFlag = ctx.Registers.GetExtendFlag();
+
+            const TWord binaryResult = srcVal + dstVal + extendFlag;
             TWord result = (srcVal & 0x0F) + (dstVal & 0x0F) + extendFlag;
             if (result > 0x09) {
                 result += 0x06;
@@ -56,6 +57,8 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             data.Dst.WriteByte(ctx, result);
             ctx.Registers.SetNegativeFlag(GetMostSignificantBit<TByte>(result));
             ctx.Registers.SetCarryFlag(result & (result ^ 0xFF));
+            ctx.Registers.SetOverflowFlag((~binaryResult & result & 0x80) != 0);
+            ctx.Registers.SetZeroFlag(result == 0);
             break;
         }
     }

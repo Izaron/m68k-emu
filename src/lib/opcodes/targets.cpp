@@ -19,8 +19,14 @@ void TTarget::SetDecAddressRegisterKind(uint8_t index) {
 TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
     switch (Kind_) {
         case DataRegisterKind: {
-            const auto reg = ctx.Registers.D[Value_.DataRegisterIndex];
-            return ctx.Memory.Read(reg, size);
+            auto reg = ctx.Registers.D[Value_.DataRegisterIndex];
+            TDataHolder data;
+            for (int i = 0; i < size; ++i) {
+                data.push_back(reg & 0xFF);
+                reg >>= 8;
+            }
+            // TODO: reverse `data`?
+            return data;
         }
         case DecAddressRegisterKind: {
             auto& reg = ctx.Registers.A[Value_.DecAddressRegisterIndex];
@@ -54,8 +60,18 @@ TLong TTarget::ReadLong(NEmulator::TContext ctx) {
 void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
     switch (Kind_) {
         case DataRegisterKind: {
-            const auto reg = ctx.Registers.D[Value_.DataRegisterIndex];
-            ctx.Memory.Write(reg, data);
+            int shift = 0;
+            int lsb = 0;
+            for (const auto value : data) {
+                shift += 8;
+                lsb <<= 8;
+                lsb += value;
+            }
+
+            auto& reg = ctx.Registers.D[Value_.DataRegisterIndex];
+            reg >>= shift;
+            reg <<= shift;
+            reg += lsb;
             break;
         }
         case DecAddressRegisterKind: {
