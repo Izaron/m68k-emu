@@ -11,7 +11,7 @@ using json = nlohmann::json;
 
 namespace {
 
-using TRamSnapshot = std::vector<std::pair<NMemory::TAddressType, std::byte>>;
+using TRamSnapshot = std::vector<std::pair<TAddressType, TByte>>;
 
 class TTestDevice : public NMemory::IDevice {
 public:
@@ -22,7 +22,7 @@ public:
         // fill RAM
         for (const auto& pair : ram) {
             const auto addr = pair[0].get<int>();
-            const auto value = pair[1].get<std::byte>();
+            const auto value = pair[1].get<TByte>();
             Values_[addr] = value;
         }
 
@@ -30,38 +30,38 @@ public:
         if (prefetch.size() != 2) {
             throw std::runtime_error("why not 2 items?");
         }
-        Prefetch_.push_back(static_cast<std::byte>(prefetch[0].get<int>() >> 8));
-        Prefetch_.push_back(static_cast<std::byte>(prefetch[0].get<int>() % 256));
-        Prefetch_.push_back(static_cast<std::byte>(prefetch[1].get<int>() >> 8));
-        Prefetch_.push_back(static_cast<std::byte>(prefetch[1].get<int>() % 256));
+        Prefetch_.push_back(static_cast<TByte>(prefetch[0].get<int>() >> 8));
+        Prefetch_.push_back(static_cast<TByte>(prefetch[0].get<int>() % 256));
+        Prefetch_.push_back(static_cast<TByte>(prefetch[1].get<int>() >> 8));
+        Prefetch_.push_back(static_cast<TByte>(prefetch[1].get<int>() % 256));
     }
 
-    NMemory::TDataHolder Read(NMemory::TAddressType addr, NMemory::TAddressType size) override {
+    TDataHolder Read(TAddressType addr, TAddressType size) override {
         if (addr == PC_) {
             if (size != 2) {
                 throw std::runtime_error("why not 2 bytes?");
             }
-            NMemory::TDataHolder res;
+            TDataHolder res;
             res.push_back(Prefetch_[0]);
             res.push_back(Prefetch_[1]);
             return res;
         }
 
-        NMemory::TDataHolder res;
+        TDataHolder res;
         for (int i = addr; i < addr + size; ++i) {
-            if (const auto it = Values_.find(addr); it != Values_.end()) {
+            if (const auto it = Values_.find(addr & 0xFFFFFF); it != Values_.end()) {
                 res.push_back(it->second);
             } else {
-                res.push_back(static_cast<std::byte>(0));
+                res.push_back(static_cast<TByte>(0));
             }
         }
         return res;
     }
 
-    void Write(NMemory::TAddressType addr, NMemory::TDataView data) override {
+    void Write(TAddressType addr, TDataView data) override {
         for (const auto value : data) {
-            if (value != static_cast<std::byte>(0)) {
-                Values_[addr] = value;
+            if (value != static_cast<TByte>(0)) {
+                Values_[addr & 0xFFFFFF] = value;
             }
             addr++;
         }
@@ -77,8 +77,8 @@ public:
 
 private:
     int PC_;
-    std::vector<std::byte> Prefetch_;
-    std::map<NMemory::TAddressType, std::byte> Values_;
+    std::vector<TByte> Prefetch_;
+    std::map<TAddressType, TByte> Values_;
 };
 
 std::string DumpRamSnapshot(const TRamSnapshot& ram) {
@@ -90,10 +90,10 @@ std::string DumpRamSnapshot(const TRamSnapshot& ram) {
 }
 
 TRamSnapshot MakeRamSnapshot(const json& ram) {
-    std::map<NMemory::TAddressType, std::byte> values;
+    std::map<TAddressType, TByte> values;
     for (const auto& pair : ram) {
         const auto addr = pair[0].get<int>();
-        const auto value = pair[1].get<std::byte>();
+        const auto value = pair[1].get<TByte>();
         values[addr] = value;
     }
 

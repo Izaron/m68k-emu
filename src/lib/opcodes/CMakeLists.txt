@@ -1,1 +1,4 @@
-add_library(opcodes STATIC opcodes.cpp)
+add_library(opcodes STATIC
+    instructions.cpp
+    targets.cpp
+)
