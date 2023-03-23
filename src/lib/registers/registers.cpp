@@ -20,6 +20,9 @@ bool GetFlag(TLong r, int index) {
 
 } // namespace
 
+void TRegisters::SetSupervisorFlag(bool flag) { return SetFlag(flag, SR, 13); }
+bool TRegisters::GetSupervisorFlag() const { return GetFlag(SR, 13); }
+
 void TRegisters::SetExtendFlag(bool flag) { return SetFlag(flag, SR, 4); }
 bool TRegisters::GetExtendFlag() const { return GetFlag(SR, 4); }
 

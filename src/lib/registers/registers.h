@@ -42,6 +42,9 @@ struct TRegisters {
     /**
      * Status register helpers
      */
+    void SetSupervisorFlag(bool flag);
+    bool GetSupervisorFlag() const;
+
     void SetExtendFlag(bool flag);
     bool GetExtendFlag() const;
 

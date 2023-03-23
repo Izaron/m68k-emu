@@ -6,6 +6,25 @@ namespace NOpcodes {
 
 static_assert(std::is_trivially_constructible_v<TTarget>);
 
+namespace {
+
+TLong& GetAReg(NRegisters::TRegisters& r, int index) {
+    if (index < 7) {
+        return r.A[index];
+    } else {
+        if (r.GetSupervisorFlag()) {
+            --r.SSP;
+            return r.SSP;
+        } else {
+            --r.USP;
+            return r.USP;
+        }
+        //return r.GetSupervisorFlag() ? r.SSP : r.USP;
+    }
+}
+
+} // namespace
+
 void TTarget::SetDataRegister(uint8_t index) {
     Kind_ = DataRegisterKind;
     Value_.DataRegisterIndex = index;
@@ -29,7 +48,7 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
             return data;
         }
         case DecAddressRegisterKind: {
-            auto& reg = ctx.Registers.A[Value_.DecAddressRegisterIndex];
+            auto& reg = GetAReg(ctx.Registers, Value_.DecAddressRegisterIndex);
             --reg;
             return ctx.Memory.Read(reg, size);
         }
@@ -75,7 +94,7 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
             break;
         }
         case DecAddressRegisterKind: {
-            const auto reg = ctx.Registers.A[Value_.DecAddressRegisterIndex];
+            const auto reg = GetAReg(ctx.Registers, Value_.DecAddressRegisterIndex);
             ctx.Memory.Write(reg, data);
             break;
         }
