@@ -40,7 +40,7 @@ bool TRegisters::GetCarryFlag() const { return GetFlag(SR, 0); }
 
 std::string Dump(const TRegisters& r) {
     std::stringstream ss;
-    //ss << std::hex << std::uppercase;
+    ss << std::hex << std::uppercase;
     for (int i = 0; i < 7; ++i) {
         ss << "D" << i << " = " << r.D[i] << "\tA" << i << " = " << r.A[i] << "\n";
     }

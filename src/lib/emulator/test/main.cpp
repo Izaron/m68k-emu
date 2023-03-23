@@ -209,14 +209,18 @@ bool WorkOnFile(const json& file) {
     std::size_t size = file.size();
     std::cerr << "work on file with " << size << " tests" << std::endl;
 
+    int oks = 0;
     for (std::size_t i = 0; i < size; ++i) {
         const bool ok = WorkOnTest(file[i]);
         std::cerr << (i + 1) << "/" << size << " test is " << (ok ? "OK" : "FAIL") << std::endl;
-        if (!ok) {
-            return false;
+        if (ok) {
+            ++oks;
         }
     }
-    return true;
+    std::cerr << "TOTAL TESTS: " << size << std::endl;
+    std::cerr << "PASSED TESTS: " << oks << std::endl;
+    std::cerr << "FAILED TESTS: " << size - oks << std::endl;
+    return oks == size;
 }
 
 } // namespace

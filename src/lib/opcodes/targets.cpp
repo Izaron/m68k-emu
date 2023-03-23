@@ -93,7 +93,7 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
             auto& reg = ctx.Registers.D[Value_.DataRegisterIndex];
             reg >>= shift;
             reg <<= shift;
-            reg += lsb;
+            reg |= lsb;
             break;
         }
         case DecAddressRegisterKind: {
