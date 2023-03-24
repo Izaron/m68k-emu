@@ -18,6 +18,7 @@ public:
         AndKind,        // AND
         AndiKind,       // ANDI
         AndiToCcrKind,  // ANDItoCCR
+        AndiToSrKind,   // ANDItoSR
         NopKind,        // NOP
     };
 

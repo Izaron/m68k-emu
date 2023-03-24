@@ -215,6 +215,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             sr = (sr & ~0xFF) | ((sr & 0xFF) & *srcVal);
             break;
         }
+        case AndiToSrKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
+            ctx.Registers.SR &= *srcVal;
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -364,6 +369,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
         pc += 2;
         inst.SetKind(AndiToCcrKind).SetSrc(src);
+    }
+    if (*word == 0b0000'0010'0111'1100) {
+        auto& pc = ctx.Registers.PC;
+        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc);
+        pc += 2;
+        inst.SetKind(AndiToSrKind).SetSrc(src);
     }
     else if (applyMask(0b1111'1111'0000'0000) == 0b0000'0110'0000'0000) {
         auto& pc = ctx.Registers.PC;
