@@ -183,6 +183,22 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
+        case AddxKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
+            SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
+            const TLongLong result = *srcVal + *dstVal + ctx.Registers.GetExtendFlag();
+            SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
+
+            const bool carry = IsCarry(result, Size_);
+            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
+            ctx.Registers.SetCarryFlag(carry);
+            ctx.Registers.SetExtendFlag(carry);
+            ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
+            if (!IsZero(result, Size_)) {
+                ctx.Registers.SetZeroFlag(0);
+            }
+            break;
+        }
     }
 
     if (HasSrc_) {
@@ -343,6 +359,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(1);
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
         inst.SetKind(AbcdKind).SetSrc(src).SetDst(dst);
+    }
+    else if (applyMask(0b1111'0001'0011'0000) == 0b1101'0001'0000'0000) {
+        const auto size = getSize0();
+        const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
+        auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
+        auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
+        inst.SetKind(AddxKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
     else if (applyMask(0b1111'0000'1100'0000) == 0b1101'0000'1100'0000) {
         const auto size = getBit(8) ? Long : Word;
