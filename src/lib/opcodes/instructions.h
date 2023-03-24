@@ -9,10 +9,11 @@ namespace NOpcodes {
 class TInstruction {
 public:
     enum EKind : uint8_t {
-        AddiKind,   // ADDI
-        NopKind,    // NOP
         AbcdKind,   // ABCD
         AddKind,    // ADD
+        AddiKind,   // ADDI
+        AddqKind,   // ADDI
+        NopKind,    // NOP
     };
 
     enum ESize : uint8_t {
@@ -21,10 +22,11 @@ public:
         Long = 4,
     };
 
-    void SetAddi(TTarget src, TTarget dst, ESize size);
-    void SetNop();
     void SetAbcd(TTarget src, TTarget dst);
     void SetAdd(TTarget src, TTarget dst, ESize size);
+    void SetAddi(TTarget src, TTarget dst, ESize size);
+    void SetAddq(TWord data, TTarget dst, ESize size);
+    void SetNop();
 
     void Execute(NEmulator::TContext ctx);
 
@@ -32,6 +34,7 @@ public:
 
 private:
     EKind Kind_;
+    TWord Data_;
     TTarget Src_;
     TTarget Dst_;
     ESize Size_;

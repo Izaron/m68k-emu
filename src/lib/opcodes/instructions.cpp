@@ -59,19 +59,6 @@ bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ES
 
 } // namespace
 
-void TInstruction::SetAddi(TTarget src, TTarget dst, ESize size) {
-    Kind_ = AddiKind;
-    Src_ = src;
-    Dst_ = dst;
-    Size_ = size;
-    HasSrc_ = HasDst_ = true;
-}
-
-void TInstruction::SetNop() {
-    Kind_ = NopKind;
-    HasSrc_ = HasDst_ = false;
-}
-
 void TInstruction::SetAbcd(TTarget src, TTarget dst) {
     Kind_ = AbcdKind;
     Src_ = src;
@@ -85,6 +72,28 @@ void TInstruction::SetAdd(TTarget src, TTarget dst, ESize size) {
     Dst_ = dst;
     Size_ = size;
     HasSrc_ = HasDst_ = true;
+}
+
+void TInstruction::SetAddi(TTarget src, TTarget dst, ESize size) {
+    Kind_ = AddiKind;
+    Src_ = src;
+    Dst_ = dst;
+    Size_ = size;
+    HasSrc_ = HasDst_ = true;
+}
+
+void TInstruction::SetAddq(TWord data, TTarget dst, ESize size) {
+    Kind_ = AddqKind;
+    Data_ = data;
+    Dst_ = dst;
+    Size_ = size;
+    HasSrc_ = false;
+    HasDst_ = true;
+}
+
+void TInstruction::SetNop() {
+    Kind_ = NopKind;
+    HasSrc_ = HasDst_ = false;
 }
 
 void TInstruction::Execute(NEmulator::TContext ctx) {
@@ -157,6 +166,26 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
         case AddiKind:
         case AddKind: {
             const TByte srcVal = Src_.ReadByte(ctx);
+            const TByte dstVal = Dst_.ReadByte(ctx);
+
+            const TWord result = TWord{0} + srcVal + dstVal;
+            const bool carry = result & ~0xFF;
+
+            const bool srcMsb = GetMostSignificantBit<TByte>(srcVal);
+            const bool dstMsb = GetMostSignificantBit<TByte>(dstVal);
+            const bool resultMsb = GetMostSignificantBit<TByte>(result);
+            const bool overflow = (srcMsb && dstMsb && !resultMsb) || (!srcMsb && !dstMsb && resultMsb);
+
+            Dst_.WriteByte(ctx, result);
+            ctx.Registers.SetNegativeFlag(resultMsb);
+            ctx.Registers.SetCarryFlag(carry);
+            ctx.Registers.SetExtendFlag(carry);
+            ctx.Registers.SetOverflowFlag(overflow);
+            ctx.Registers.SetZeroFlag((result & 0xFF) == 0);
+            break;
+        }
+        case AddqKind: {
+            const TByte srcVal = Data_ ? Data_: 8;
             const TByte dstVal = Dst_.ReadByte(ctx);
 
             const TWord result = TWord{0} + srcVal + dstVal;
@@ -303,7 +332,11 @@ TInstruction TInstruction::Decode(NEmulator::TContext ctx) {
     else if (word == 0b0100'1100'0111'0001) {
         inst.SetNop();
     }
-    else if (applyMask(0b1111'0001'1111'0000) == 0b1100'0001'0000'0000) {
+    else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
+        TTarget dst = parseTarget();
+        inst.SetAddq(getBits(9, 3), dst, getSize0());
+    }
+    else if (applyMask(0b1111'0001'0000'0000) == 0b1100'0001'0000'0000) {
         const auto func = getBit(3) ? &TTarget::SetAddressDecrement : &TTarget::SetDataRegister;
         TTarget src;
         (src.*func)(getBits(0, 3));
