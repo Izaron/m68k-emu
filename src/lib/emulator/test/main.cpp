@@ -254,8 +254,8 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int from = 7;
-    int to = 7;
+    int from = 2;
+    int to = 2;
 
     int num = 0;
     for (const auto& path : paths) {

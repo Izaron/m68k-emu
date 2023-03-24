@@ -96,9 +96,6 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
     if (!name) { return name.error(); }
 
     switch (Kind_) {
-        case NopKind: {
-            break;
-        }
         case AbcdKind: {
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
             SAFE_DECLARE(dstVal, Dst_.ReadByte(ctx));
@@ -197,6 +194,22 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             if (!IsZero(result, Size_)) {
                 ctx.Registers.SetZeroFlag(0);
             }
+            break;
+        }
+        case AndKind:
+        case AndiKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
+            SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
+            const TLongLong result = *srcVal & *dstVal;
+            SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
+
+            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
+            ctx.Registers.SetZeroFlag(IsZero(result, Size_));
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
+        case NopKind: {
             break;
         }
     }
@@ -346,6 +359,15 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (!dst) { return tl::unexpected(dst.error()); }
         inst.SetKind(AddiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
+    else if (applyMask(0b1111'1111'0000'0000) == 0b0000'0010'0000'0000) {
+        auto& pc = ctx.Registers.PC;
+        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
+        pc += (getSize0() == Long) ? 4 : 2;
+
+        const auto dst = parseTarget();
+        if (!dst) { return tl::unexpected(dst.error()); }
+        inst.SetKind(AndiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
+    }
     else if (*word == 0b0100'1100'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -354,7 +376,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (!dst) { return tl::unexpected(dst.error()); }
         inst.SetKind(AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
     }
-    else if (applyMask(0b1111'0001'0000'0000) == 0b1100'0001'0000'0000) {
+    else if (applyMask(0b1111'0001'1111'0000) == 0b1100'0001'0000'0000) {
         const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
         auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(1);
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
@@ -376,6 +398,18 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
 
         inst.SetKind(AddaKind).SetSrc(*src).SetDst(dst).SetSize(size);
+    }
+    else if (applyMask(0b1111'0000'0000'0000) == 0b1100'0000'0000'0000) {
+        auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+
+        auto dst = parseTarget();
+        if (!dst) { return tl::unexpected(dst.error()); }
+
+        if (!getBit(8)) {
+            std::swap(src, *dst);
+        }
+
+        inst.SetKind(AndKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b1101'0000'0000'0000) {
         auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));

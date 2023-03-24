@@ -15,6 +15,8 @@ public:
         AddiKind,   // ADDI
         AddqKind,   // ADDQ
         AddxKind,   // ADDX
+        AndKind,    // AND
+        AndiKind,   // ANDI
         NopKind,    // NOP
     };
 
