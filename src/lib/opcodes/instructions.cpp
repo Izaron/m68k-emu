@@ -58,49 +58,32 @@ bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ES
 
 } // namespace
 
-void TInstruction::SetAbcd(TTarget src, TTarget dst) {
-    Kind_ = AbcdKind;
-    Src_ = src;
-    Dst_ = dst;
-    HasSrc_ = HasDst_ = true;
-}
-
-void TInstruction::SetAdd(TTarget src, TTarget dst, ESize size) {
-    Kind_ = AddKind;
-    Src_ = src;
-    Dst_ = dst;
-    Size_ = size;
-    HasSrc_ = HasDst_ = true;
-}
-
-void TInstruction::SetAdda(TTarget src, TTarget dst, ESize size) {
-    Kind_ = AddaKind;
-    Src_ = src;
-    Dst_ = dst;
-    Size_ = size;
-    HasSrc_ = HasDst_ = true;
-}
-
-void TInstruction::SetAddi(TTarget src, TTarget dst, ESize size) {
-    Kind_ = AddiKind;
-    Src_ = src;
-    Dst_ = dst;
-    Size_ = size;
-    HasSrc_ = HasDst_ = true;
-}
-
-void TInstruction::SetAddq(TWord data, TTarget dst, ESize size) {
-    Kind_ = AddqKind;
-    Data_ = data;
-    Dst_ = dst;
-    Size_ = size;
-    HasSrc_ = false;
-    HasDst_ = true;
-}
-
-void TInstruction::SetNop() {
-    Kind_ = NopKind;
+TInstruction& TInstruction::SetKind(EKind kind) {
+    Kind_ = kind;
     HasSrc_ = HasDst_ = false;
+    return *this;
+}
+
+TInstruction& TInstruction::SetSrc(TTarget target) {
+    Src_ = target;
+    HasSrc_ = true;
+    return *this;
+}
+
+TInstruction& TInstruction::SetDst(TTarget target) {
+    Dst_ = target;
+    HasDst_ = true;
+    return *this;
+}
+
+TInstruction& TInstruction::SetSize(ESize size) {
+    Size_ = size;
+    return *this;
+}
+
+TInstruction& TInstruction::SetData(TWord data) {
+    Data_ = data;
+    return *this;
 }
 
 std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
@@ -339,53 +322,49 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     TInstruction inst;
 
     if (applyMask(0b1111'1111'0000'0000) == 0b0000'0110'0000'0000) {
-        TTarget src;
         auto& pc = ctx.Registers.PC;
-        src.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
+        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
         pc += (getSize0() == Long) ? 4 : 2;
 
         const auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
-        inst.SetAddi(src, *dst, getSize0());
+        inst.SetKind(AddiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (*word == 0b0100'1100'0111'0001) {
-        inst.SetNop();
+        inst.SetKind(NopKind);
     }
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
         const auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
-        inst.SetAddq(getBits(9, 3), *dst, getSize0());
+        inst.SetKind(AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0001'0000'0000) == 0b1100'0001'0000'0000) {
         const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
-        TTarget src;
-        src.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(1);
-        TTarget dst;
-        dst.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
-        inst.SetAbcd(src, dst);
+        auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(1);
+        auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
+        inst.SetKind(AbcdKind).SetSrc(src).SetDst(dst);
     }
     else if (applyMask(0b1111'0000'1100'0000) == 0b1101'0000'1100'0000) {
         const auto size = getBit(8) ? Long : Word;
 
         auto src = parseTargetWithSize(size);
         if (!src) { return tl::unexpected(src.error()); }
-        src->SetSize(size);
 
-        TTarget dst;
-        dst.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
+        auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
 
-        inst.SetAdda(*src, dst, size);
+        inst.SetKind(AddaKind).SetSrc(*src).SetDst(dst).SetSize(size);
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b1101'0000'0000'0000) {
-        TTarget src;
-        src.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+        auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
 
         auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
+
         if (!getBit(8)) {
             std::swap(src, *dst);
         }
-        inst.SetAdd(src, *dst, getSize0());
+
+        inst.SetKind(AddKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else {
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);

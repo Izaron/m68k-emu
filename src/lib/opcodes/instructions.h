@@ -23,12 +23,11 @@ public:
         Long = 4,
     };
 
-    void SetAbcd(TTarget src, TTarget dst);
-    void SetAdd(TTarget src, TTarget dst, ESize size);
-    void SetAdda(TTarget src, TTarget dst, ESize size);
-    void SetAddi(TTarget src, TTarget dst, ESize size);
-    void SetAddq(TWord data, TTarget dst, ESize size);
-    void SetNop();
+    TInstruction& SetKind(EKind kind);
+    TInstruction& SetSrc(TTarget target);
+    TInstruction& SetDst(TTarget target);
+    TInstruction& SetSize(ESize size);
+    TInstruction& SetData(TWord data);
 
     [[nodiscard]] std::optional<TError> Execute(NEmulator::TContext ctx);
 
@@ -36,10 +35,10 @@ public:
 
 private:
     EKind Kind_;
-    TWord Data_;
     TTarget Src_;
     TTarget Dst_;
     ESize Size_;
+    TWord Data_;
 
     bool HasSrc_;
     bool HasDst_;

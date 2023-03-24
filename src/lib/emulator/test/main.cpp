@@ -254,10 +254,10 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int from = 5;
-    int to = 5;
+    int from = 1;
+    int to = 6;
 
-    int num = -1;
+    int num = 0;
     for (const auto& path : paths) {
         ++num;
         if (num < from || num > to) continue;
