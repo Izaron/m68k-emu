@@ -89,7 +89,7 @@ TInstruction& TInstruction::SetData(TWord data) {
 std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
 #define SAFE_CALL(arg)                              \
-    if (auto err = arg) { return std::move(arg); }
+    if (auto err = arg) { return std::move(err); }
 
 #define SAFE_DECLARE(name, init)                    \
     const auto name = init;                         \
@@ -382,13 +382,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
         inst.SetKind(AbcdKind).SetSrc(src).SetDst(dst);
     }
-    else if (applyMask(0b1111'0001'0011'0000) == 0b1101'0001'0000'0000) {
-        const auto size = getSize0();
-        const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
-        auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
-        auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
-        inst.SetKind(AddxKind).SetSrc(src).SetDst(dst).SetSize(size);
-    }
     else if (applyMask(0b1111'0000'1100'0000) == 0b1101'0000'1100'0000) {
         const auto size = getBit(8) ? Long : Word;
 
@@ -398,6 +391,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
 
         inst.SetKind(AddaKind).SetSrc(*src).SetDst(dst).SetSize(size);
+    }
+    else if (applyMask(0b1111'0001'0011'0000) == 0b1101'0001'0000'0000) {
+        const auto size = getSize0();
+        const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
+        auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
+        auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
+        inst.SetKind(AddxKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b1100'0000'0000'0000) {
         auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
