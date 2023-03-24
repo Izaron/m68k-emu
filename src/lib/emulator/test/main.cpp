@@ -11,14 +11,11 @@ using json = nlohmann::json;
 
 namespace {
 
-using TRamSnapshot = std::vector<std::pair<TAddressType, TByte>>;
+using TRamSnapshot = std::map<TAddressType, TByte>;
 
 class TTestDevice : public NMemory::IDevice {
 public:
-    TTestDevice(int pc, const json& prefetch, const json& ram) {
-        // remember the PC
-        PC_ = pc;
-
+    TTestDevice(TLong pc, const json& prefetch, const json& ram) {
         // fill RAM
         for (const auto& pair : ram) {
             const auto addr = pair[0].get<int>();
@@ -28,22 +25,16 @@ public:
 
         // fill prefetch
         assert(prefetch.size() == 2);
-        Prefetch_.push_back(prefetch[0].get<int>() >> 8);
-        Prefetch_.push_back(prefetch[0].get<int>() % 256);
-        Prefetch_.push_back(prefetch[1].get<int>() >> 8);
-        Prefetch_.push_back(prefetch[1].get<int>() % 256);
+        Values_[pc    ] = prefetch[0].get<int>() >> 8;
+        Values_[pc + 1] = prefetch[0].get<int>() % 256;
+        Values_[pc + 2] = prefetch[1].get<int>() >> 8;
+        Values_[pc + 3] = prefetch[1].get<int>() % 256;
     }
 
     tl::expected<TDataHolder, TError> Read(TAddressType addr, TAddressType size) override {
-        if (addr >= PC_ && addr + size - PC_ <= 4) {
-            TDataHolder res;
-            for (int i = 0; i < size; ++i) {
-                res.push_back(Prefetch_[addr + i - PC_]);
-            }
-            return res;
-        }
+        std::cerr << "Read memory " << (addr & 0xFFFFFF) << " with size " << size << std::endl;
 
-        if (addr % size != 0) {
+        if (size > 1 && addr % 2 != 0) {
             return tl::unexpected<TError>(TError::UnalignedMemoryAccess, "memory access at address %#08x of size %d", addr, size);
         }
 
@@ -69,18 +60,12 @@ public:
         return std::nullopt;
     }
 
-    TRamSnapshot MakeRamSnapshot() const {
-        TRamSnapshot res;
-        for (const auto& p : Values_) {
-            res.emplace_back(p.first, p.second);
-        }
-        return res;
+    TRamSnapshot GetRamSnapshot() const {
+        return Values_;
     }
 
 private:
-    int PC_;
-    std::vector<TByte> Prefetch_;
-    std::map<TAddressType, TByte> Values_;
+    TRamSnapshot Values_;
 };
 
 std::string DumpRamSnapshot(const TRamSnapshot& ram) {
@@ -91,19 +76,31 @@ std::string DumpRamSnapshot(const TRamSnapshot& ram) {
     return ss.str();
 }
 
-TRamSnapshot MakeRamSnapshot(const json& ram) {
-    std::map<TAddressType, TByte> values;
+TRamSnapshot GetRamSnapshot(const json& ram) {
+    TRamSnapshot res;
     for (const auto& pair : ram) {
         const auto addr = pair[0].get<int>();
         const auto value = pair[1].get<TByte>();
-        values[addr] = value;
-    }
-
-    TRamSnapshot res;
-    for (const auto& p : values) {
-        res.emplace_back(p.first, p.second);
+        res[addr] = value;
     }
     return res;
+}
+
+std::vector<std::pair<TAddressType, TByte>> GetRamDiff(const TRamSnapshot& ram0, const TRamSnapshot& ram1) {
+    std::vector<std::pair<TAddressType, TByte>> diff;
+    for (const auto& p : ram1) {
+        const auto it = ram0.find(p.first);
+        if (it == ram0.end() || it->second != p.second) {
+            diff.emplace_back(p.first, p.second);
+        }
+    }
+    for (const auto& p : ram0) {
+        if (ram1.find(p.first) == ram1.end()) {
+            diff.emplace_back(p.first, 0);
+        }
+    }
+    if (!diff.empty()) std::sort(diff.begin(), diff.end());
+    return diff;
 }
 
 json LoadTestFile(std::string_view path) {
@@ -157,51 +154,55 @@ bool WorkOnTest(const json& test) {
     const auto& initialJson = test["initial"];
     const auto& finalJson = test["final"];
 
-    auto initial = ParseRegisters(initialJson);
-    auto expectedFinal = ParseRegisters(finalJson);
+    auto initRegs = ParseRegisters(initialJson);
+    auto expectedRegs = ParseRegisters(finalJson);
+    auto actualRegs = initRegs;
 
-    auto actualFinal = initial;
-    TTestDevice device{initial.PC, initialJson["prefetch"], initialJson["ram"]};
-    NEmulator::TContext ctx{.Registers = actualFinal, .Memory = device};
+    TTestDevice device{initRegs.PC, initialJson["prefetch"], initialJson["ram"]};
+    const auto actualRam0 = device.GetRamSnapshot();
+    const auto expectedRam0 = GetRamSnapshot(initialJson["ram"]);
+
+    NEmulator::TContext ctx{.Registers = actualRegs, .Memory = device};
     const auto err = NEmulator::Emulate(ctx);
 
     if (err) {
         std::cerr << "Got error: " << err->GetWhat() << std::endl;
 
         // this program counter means there really was an illegal instruction
-        return (expectedFinal.PC == 0x1400);
+        return (expectedRegs.PC == 0x1400);
     }
 
-    // TODO: compare RAM
-    const auto regsDiff = DumpDiff(expectedFinal, actualFinal);
-    const auto actualRam = MakeRamSnapshot(device.MakeRamSnapshot());
-    const auto expectedRam = MakeRamSnapshot(finalJson["ram"]);
+    const auto actualRam1 = device.GetRamSnapshot();
+    const auto expectedRam1 = GetRamSnapshot(finalJson["ram"]);
 
-    if (regsDiff || expectedRam != actualRam) {
+    const auto regsDiff = DumpDiff(expectedRegs, actualRegs);
+    const bool ramDiffers = GetRamDiff(actualRam0, actualRam1) != GetRamDiff(expectedRam0, expectedRam1);
+
+    if (regsDiff || ramDiffers) {
         std::cerr << "Test name: \"" << test["name"].get<std::string>() << "\"" << std::endl << std::endl;
 
-        if (regsDiff || true) {
+        if (regsDiff) {
             std::cerr << "Initial registers:" << std::endl;
-            std::cerr << Dump(initial) << std::endl;
+            std::cerr << Dump(initRegs) << std::endl;
 
             std::cerr << "Actual final registers:" << std::endl;
-            std::cerr << Dump(actualFinal) << std::endl;
+            std::cerr << Dump(actualRegs) << std::endl;
 
             std::cerr << "Expected final registers:" << std::endl;
-            std::cerr << Dump(expectedFinal) << std::endl;
+            std::cerr << Dump(expectedRegs) << std::endl;
 
             std::cerr << "Differing registers: " << *regsDiff << std::endl << std::endl;
         }
 
-        if (expectedRam != actualRam || true) {
+        if (ramDiffers) {
             std::cerr << "Initial RAM:" << std::endl;
-            std::cerr << DumpRamSnapshot(MakeRamSnapshot(initialJson["ram"])) << std::endl;
+            std::cerr << DumpRamSnapshot(actualRam0) << std::endl;
 
             std::cerr << "Actual RAM:" << std::endl;
-            std::cerr << DumpRamSnapshot(actualRam) << std::endl;
+            std::cerr << DumpRamSnapshot(actualRam1) << std::endl;
 
             std::cerr << "Expected RAM:" << std::endl;
-            std::cerr << DumpRamSnapshot(expectedRam) << std::endl;
+            std::cerr << DumpRamSnapshot(expectedRam1) << std::endl;
 
             std::cerr << "RAM differs" << std::endl;
         }
@@ -253,7 +254,7 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int skipFiles = 3;
+    int skipFiles = 0;
     for (const auto& path : paths) {
         if (skipFiles) {
             --skipFiles;
@@ -263,6 +264,5 @@ int main() {
         if (!WorkOnFile(file)) {
             break;
         }
-        break;
     }
 }

@@ -24,9 +24,9 @@ bool GetMostSignificantBit(Value value) {
 
 bool IsCarry(TLongLong value, TInstruction::ESize size) {
     switch (size) {
-        case TInstruction::Byte: return value & ~0xFF;
-        case TInstruction::Word: return value & ~0xFFFF;
-        case TInstruction::Long: return value & ~0xFFFFFFFF;
+        case TInstruction::Byte: return value & (value ^ 0xFF);
+        case TInstruction::Word: return value & (value ^ 0xFFFF);
+        case TInstruction::Long: return value & (value ^ 0xFFFFFFFF);
         default: __builtin_unreachable();
     }
 }
@@ -42,9 +42,9 @@ bool IsZero(TLongLong value, TInstruction::ESize size) {
 
 bool GetMsb(TLongLong value, TInstruction::ESize size) {
     switch (size) {
-        case TInstruction::Byte: return value & (1 << 7);
-        case TInstruction::Word: return value & (1 << 15);
-        case TInstruction::Long: return value & (1 << 31);
+        case TInstruction::Byte: return (value >> 7) & 1;
+        case TInstruction::Word: return (value >> 15) & 1;
+        case TInstruction::Long: return (value >> 31) & 1;
         default: __builtin_unreachable();
     }
 }
@@ -151,7 +151,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case AddKind: {
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
+            std::cerr << "SrcVal " << *srcVal << std::endl;
+            std::cerr << "DstVal " << *dstVal << std::endl;
             const TLongLong result = *srcVal + *dstVal;
+            std::cerr << "Result " << result << std::endl;
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             const bool carry = IsCarry(result, Size_);
@@ -163,7 +166,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case AddqKind: {
-            const TLongLong srcVal = Data_ ? Data_: 8;
+            const TLongLong srcVal = Data_ ? Data_ : 8;
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
             const TLongLong result = srcVal + *dstVal;
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));

@@ -200,16 +200,20 @@ tl::expected<TLong, TError> TTarget::ReadLong(NEmulator::TContext ctx) {
 
 std::optional<TError> TTarget::Write(NEmulator::TContext ctx, TDataView data) {
     const auto writeRegister = [data](TLong& reg) {
-        int shift = 0;
-        int lsb = 0;
+        TLong shift = 0;
+        TLong lsb = 0;
         for (const auto value : data) {
             shift += 8;
             lsb <<= 8;
             lsb += value;
         }
 
-        reg >>= shift;
-        reg <<= shift;
+        if (shift == 32) {
+            reg = 0;
+        } else {
+            reg >>= shift;
+            reg <<= shift;
+        }
         reg |= lsb;
     };
 
