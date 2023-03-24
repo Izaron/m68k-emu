@@ -209,6 +209,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
+        case AndiToCcrKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
+            auto& sr = ctx.Registers.SR;
+            sr = (sr & ~0xFF) | ((sr & 0xFF) & *srcVal);
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -350,7 +356,16 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     // decode the opcode
     TInstruction inst;
 
-    if (applyMask(0b1111'1111'0000'0000) == 0b0000'0110'0000'0000) {
+    if (*word == 0b0100'1100'0111'0001) {
+        inst.SetKind(NopKind);
+    }
+    if (*word == 0b0000'0010'0011'1100) {
+        auto& pc = ctx.Registers.PC;
+        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
+        pc += 2;
+        inst.SetKind(AndiToCcrKind).SetSrc(src);
+    }
+    else if (applyMask(0b1111'1111'0000'0000) == 0b0000'0110'0000'0000) {
         auto& pc = ctx.Registers.PC;
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
         pc += (getSize0() == Long) ? 4 : 2;
@@ -367,9 +382,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         const auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
         inst.SetKind(AndiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
-    }
-    else if (*word == 0b0100'1100'0111'0001) {
-        inst.SetKind(NopKind);
     }
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
         const auto dst = parseTarget();

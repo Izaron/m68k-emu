@@ -9,15 +9,16 @@ namespace NOpcodes {
 class TInstruction {
 public:
     enum EKind : uint8_t {
-        AbcdKind,   // ABCD
-        AddKind,    // ADD
-        AddaKind,   // ADDA
-        AddiKind,   // ADDI
-        AddqKind,   // ADDQ
-        AddxKind,   // ADDX
-        AndKind,    // AND
-        AndiKind,   // ANDI
-        NopKind,    // NOP
+        AbcdKind,       // ABCD
+        AddKind,        // ADD
+        AddaKind,       // ADDA
+        AddiKind,       // ADDI
+        AddqKind,       // ADDQ
+        AddxKind,       // ADDX
+        AndKind,        // AND
+        AndiKind,       // ANDI
+        AndiToCcrKind,  // ANDItoCCR
+        NopKind,        // NOP
     };
 
     enum ESize : uint8_t {
