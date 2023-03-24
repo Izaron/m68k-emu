@@ -167,12 +167,7 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
             break;
         }
         case AddressIndexKind: {
-            const TByte displacement = GetBits(ExtWord0_, 0, 8);
-            const uint8_t index = GetBits(ExtWord0_, 12, 3);
-            const TLong indexReg = GetBit(ExtWord0_, 15) ? GetAReg(ctx.Registers, index) : ctx.Registers.D[index];
-            const TLong scale = GetScaleValue(GetBits(ExtWord0_, 9, 2));
-            const TLong reg = GetAReg(ctx.Registers, Index_);
-            const TLong addr = reg + static_cast<TSignedByte>(displacement) + static_cast<TSignedLong>(indexReg) * scale;
+            const TLong addr = GetIndexedAddress(ctx, GetAReg(ctx.Registers, Index_));
             data = ctx.Memory.Read(addr, size);
             break;
         }
@@ -181,11 +176,7 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
             break;
         }
         case ProgramCounterIndexKind: {
-            const TByte displacement = GetBits(ExtWord0_, 0, 8);
-            const uint8_t index = GetBits(ExtWord0_, 12, 3);
-            const TLong indexReg = GetBit(ExtWord0_, 15) ? GetAReg(ctx.Registers, index) : ctx.Registers.D[index];
-            const TLong scale = GetScaleValue(GetBits(ExtWord0_, 9, 2));
-            const TLong addr = ctx.Registers.PC - 2 + static_cast<TSignedByte>(displacement) + indexReg * scale;
+            const TLong addr = GetIndexedAddress(ctx, ctx.Registers.PC - 2);
             data = ctx.Memory.Read(addr, size);
             break;
         }
@@ -266,12 +257,7 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
             break;
         }
         case AddressIndexKind: {
-            const TByte displacement = GetBits(ExtWord0_, 0, 8);
-            const uint8_t index = GetBits(ExtWord0_, 12, 3);
-            const TLong indexReg = GetBit(ExtWord0_, 15) ? GetAReg(ctx.Registers, index) : ctx.Registers.D[index];
-            const TLong scale = GetScaleValue(GetBits(ExtWord0_, 9, 2));
-            const TLong reg = GetAReg(ctx.Registers, Index_);
-            const TLong addr = reg + static_cast<TSignedByte>(displacement) + static_cast<TSignedLong>(indexReg) * scale;
+            const TLong addr = GetIndexedAddress(ctx, GetAReg(ctx.Registers, Index_));
             ctx.Memory.Write(addr, data);
             break;
         }
@@ -280,11 +266,7 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
             break;
         }
         case ProgramCounterIndexKind: {
-            const TByte displacement = GetBits(ExtWord0_, 0, 8);
-            const uint8_t index = GetBits(ExtWord0_, 12, 3);
-            const TLong indexReg = GetBit(ExtWord0_, 15) ? GetAReg(ctx.Registers, index) : ctx.Registers.D[index];
-            const TLong scale = GetScaleValue(GetBits(ExtWord0_, 9, 2));
-            const TLong addr = ctx.Registers.PC - 2 + static_cast<TSignedByte>(displacement) + indexReg * scale;
+            const TLong addr = GetIndexedAddress(ctx, ctx.Registers.PC - 2);
             ctx.Memory.Write(addr, data);
             break;
         }
@@ -328,6 +310,21 @@ void TTarget::WriteLong(NEmulator::TContext ctx, TLong l) {
         l >>= 8;
     }
     return Write(ctx, data);
+}
+
+TLong TTarget::GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress) {
+    const uint8_t xregNum = GetBits(ExtWord0_, 12, 3);
+    const TLong xreg = GetBit(ExtWord0_, 15) ? GetAReg(ctx.Registers, xregNum) : ctx.Registers.D[xregNum];
+    const TLong size = GetBit(ExtWord0_, 11) ? /*Long*/ 4 : /*Word*/ 2;
+    const TLong scale = GetScaleValue(GetBits(ExtWord0_, 9, 2));
+    const TSignedByte disp = static_cast<TSignedByte>(GetBits(ExtWord0_, 0, 8));
+
+    TSignedLong clarifiedXreg = xreg;
+    if (size == 2) {
+        clarifiedXreg = static_cast<TSignedWord>(clarifiedXreg);
+    }
+
+    return baseAddress + disp + clarifiedXreg * scale;
 }
 
 } // namespace NOpcodes

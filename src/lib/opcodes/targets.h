@@ -52,6 +52,9 @@ public:
     void WriteLong(NEmulator::TContext ctx, TLong l);
 
 private:
+    TLong GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress);
+
+private:
     EKind Kind_;
     uint8_t Index_;
     TWord ExtWord0_;
