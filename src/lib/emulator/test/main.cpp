@@ -254,7 +254,7 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int from = 14;
+    int from = 1;
     int to = 14;
 
     int num = 0;

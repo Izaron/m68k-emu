@@ -37,7 +37,7 @@ struct TRegisters {
      * Status register
      * TODO: add description for each bit?
      */
-    TLong SR;
+    TWord SR;
 
     /**
      * Status register helpers
