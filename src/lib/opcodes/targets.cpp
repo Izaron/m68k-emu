@@ -200,6 +200,15 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
     return data;
 }
 
+TLongLong TTarget::ReadAsLongLong(NEmulator::TContext ctx, TAddressType size) {
+    const auto data = Read(ctx, size);
+    TLongLong res = data[0];
+    for (int i = 1; i < size; ++i) {
+        res = (res << 8) + data[i];
+    }
+    return res;
+}
+
 TByte TTarget::ReadByte(NEmulator::TContext ctx) {
     return Read(ctx, /*size=*/1)[0];
 }
@@ -285,6 +294,15 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
         default: {
             break;
         }
+    }
+}
+
+void TTarget::WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size) {
+    switch (size) {
+        case 1: return WriteByte(ctx, value);
+        case 2: return WriteWord(ctx, value);
+        case 4: return WriteLong(ctx, value);
+        default: __builtin_unreachable();
     }
 }
 

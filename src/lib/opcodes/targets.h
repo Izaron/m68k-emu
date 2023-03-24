@@ -41,12 +41,14 @@ public:
 
     // read methods
     TDataHolder Read(NEmulator::TContext ctx, TAddressType size);
+    TLongLong ReadAsLongLong(NEmulator::TContext ctx, TAddressType size);
     TByte ReadByte(NEmulator::TContext ctx);
     TWord ReadWord(NEmulator::TContext ctx);
     TLong ReadLong(NEmulator::TContext ctx);
 
     // write methods
     void Write(NEmulator::TContext ctx, TDataView data);
+    void WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size);
     void WriteByte(NEmulator::TContext ctx, TByte b);
     void WriteWord(NEmulator::TContext ctx, TWord w);
     void WriteLong(NEmulator::TContext ctx, TLong l);

@@ -9,6 +9,7 @@ namespace NOpcodes {
 class TInstruction {
 public:
     enum EKind : uint8_t {
+        AddiKind,   // ADDI
         NopKind,    // NOP
         AbcdKind,   // ABCD
         AddKind,    // ADD
@@ -20,6 +21,7 @@ public:
         Long = 4,
     };
 
+    void SetAddi(TTarget src, TTarget dst, ESize size);
     void SetNop();
     void SetAbcd(TTarget src, TTarget dst);
     void SetAdd(TTarget src, TTarget dst, ESize size);
