@@ -254,12 +254,13 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int skipFiles = 0;
+    int from = 5;
+    int to = 5;
+
+    int num = -1;
     for (const auto& path : paths) {
-        if (skipFiles) {
-            --skipFiles;
-            continue;
-        }
+        ++num;
+        if (num < from || num > to) continue;
         auto file = LoadTestFile(path);
         if (!WorkOnFile(file)) {
             break;

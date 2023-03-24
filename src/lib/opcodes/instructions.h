@@ -11,8 +11,9 @@ public:
     enum EKind : uint8_t {
         AbcdKind,   // ABCD
         AddKind,    // ADD
+        AddaKind,   // ADDA
         AddiKind,   // ADDI
-        AddqKind,   // ADDI
+        AddqKind,   // ADDQ
         NopKind,    // NOP
     };
 
@@ -24,6 +25,7 @@ public:
 
     void SetAbcd(TTarget src, TTarget dst);
     void SetAdd(TTarget src, TTarget dst, ESize size);
+    void SetAdda(TTarget src, TTarget dst, ESize size);
     void SetAddi(TTarget src, TTarget dst, ESize size);
     void SetAddq(TWord data, TTarget dst, ESize size);
     void SetNop();

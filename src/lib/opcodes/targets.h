@@ -22,7 +22,7 @@ public:
     };
 
     TTarget& SetKind(EKind kind);
-    TTarget& SetSize(uint8_t index);
+    TTarget& SetSize(uint8_t size);
     TTarget& SetIndex(uint8_t index);
     TTarget& SetExtWord0(TWord extWord0);
     TTarget& SetExtWord1(TWord extWord1);

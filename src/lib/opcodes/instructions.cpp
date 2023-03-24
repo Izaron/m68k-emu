@@ -73,6 +73,14 @@ void TInstruction::SetAdd(TTarget src, TTarget dst, ESize size) {
     HasSrc_ = HasDst_ = true;
 }
 
+void TInstruction::SetAdda(TTarget src, TTarget dst, ESize size) {
+    Kind_ = AddaKind;
+    Src_ = src;
+    Dst_ = dst;
+    Size_ = size;
+    HasSrc_ = HasDst_ = true;
+}
+
 void TInstruction::SetAddi(TTarget src, TTarget dst, ESize size) {
     Kind_ = AddiKind;
     Src_ = src;
@@ -147,14 +155,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
-        case AddiKind:
-        case AddKind: {
+        case AddKind:
+        case AddiKind: {
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
-            std::cerr << "SrcVal " << *srcVal << std::endl;
-            std::cerr << "DstVal " << *dstVal << std::endl;
             const TLongLong result = *srcVal + *dstVal;
-            std::cerr << "Result " << result << std::endl;
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             const bool carry = IsCarry(result, Size_);
@@ -163,6 +168,20 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetExtendFlag(carry);
             ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
+            break;
+        }
+        case AddaKind: {
+            TLongLong src;
+            if (Size_ == Word) {
+                SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
+                src = static_cast<TSignedLongLong>(static_cast<TSignedWord>(*srcVal));
+            } else {
+                SAFE_DECLARE(srcVal, Src_.ReadLong(ctx));
+                src = *srcVal;
+            }
+            SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
+            const TLongLong result = src + *dstVal;
+            SAFE_CALL(Dst_.WriteSized(ctx, result, Long));
             break;
         }
         case AddqKind: {
@@ -233,69 +252,69 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
     };
 
-    const auto parseDst = [&]() -> tl::expected<TTarget, TError> {
-        TTarget dst;
+    const auto parseTargetWithSize = [&](ESize size) -> tl::expected<TTarget, TError> {
+        TTarget target;
 
         const auto mode = getBits(3, 3);
         const auto xn = getBits(0, 3);
 
         switch (mode) {
             case 0: {
-                dst.SetKind(TTarget::DataRegisterKind).SetIndex(xn);
+                target.SetKind(TTarget::DataRegisterKind).SetIndex(xn);
                 break;
             }
             case 1: {
-                dst.SetKind(TTarget::AddressRegisterKind).SetIndex(xn);
+                target.SetKind(TTarget::AddressRegisterKind).SetIndex(xn);
                 break;
             }
             case 2: {
-                dst.SetKind(TTarget::AddressKind).SetIndex(xn);
+                target.SetKind(TTarget::AddressKind).SetIndex(xn);
                 break;
             }
             case 3: {
-                dst.SetKind(TTarget::AddressIncrementKind).SetIndex(xn).SetSize(getSize0());
+                target.SetKind(TTarget::AddressIncrementKind).SetIndex(xn).SetSize(size);
                 break;
             }
             case 4: {
-                dst.SetKind(TTarget::AddressDecrementKind).SetIndex(xn).SetSize(getSize0());
+                target.SetKind(TTarget::AddressDecrementKind).SetIndex(xn).SetSize(size);
                 break;
             }
             case 5: {
                 READ_WORD_SAFE;
-                dst.SetKind(TTarget::AddressDisplacementKind).SetIndex(xn).SetExtWord0(*word);
+                target.SetKind(TTarget::AddressDisplacementKind).SetIndex(xn).SetExtWord0(*word);
                 break;
             }
             case 6: {
                 READ_WORD_SAFE;
-                dst.SetKind(TTarget::AddressIndexKind).SetIndex(xn).SetExtWord0(*word);
+                target.SetKind(TTarget::AddressIndexKind).SetIndex(xn).SetExtWord0(*word);
                 break;
             }
             case 7: {
                 switch (xn) {
                     case 0: {
                         READ_WORD_SAFE;
-                        dst.SetKind(TTarget::AbsoluteShortKind).SetExtWord0(*word);
+                        target.SetKind(TTarget::AbsoluteShortKind).SetExtWord0(*word);
                         break;
                     }
                     case 1: {
                         READ_TWO_WORDS_SAFE;
-                        dst.SetKind(TTarget::AbsoluteLongKind).SetExtWord0(*word0).SetExtWord1(*word1);
+                        target.SetKind(TTarget::AbsoluteLongKind).SetExtWord0(*word0).SetExtWord1(*word1);
                         break;
                     }
                     case 2: {
                         READ_WORD_SAFE;
-                        dst.SetKind(TTarget::ProgramCounterDisplacementKind).SetExtWord0(*word);
+                        target.SetKind(TTarget::ProgramCounterDisplacementKind).SetExtWord0(*word);
                         break;
                     }
                     case 3: {
                         READ_WORD_SAFE;
-                        dst.SetKind(TTarget::ProgramCounterIndexKind).SetExtWord0(*word);
+                        target.SetKind(TTarget::ProgramCounterIndexKind).SetExtWord0(*word);
                         break;
                     }
                     case 4: {
                         auto& pc = ctx.Registers.PC;
-                        dst.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
-                        pc += (getSize0() == Long) ? 4 : 2;
+                        target.SetKind(TTarget::ImmediateKind).SetAddress((size == Byte) ? (pc + 1) : pc);
+                        pc += (size == Long) ? 4 : 2;
                         break;
                     }
                     default: {
@@ -309,7 +328,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             }
         }
 
-        return dst;
+        return target;
+    };
+
+    const auto parseTarget = [&]() {
+        return parseTargetWithSize(getSize0());
     };
 
     // decode the opcode
@@ -321,7 +344,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         src.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
         pc += (getSize0() == Long) ? 4 : 2;
 
-        const auto dst = parseDst();
+        const auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
         inst.SetAddi(src, *dst, getSize0());
     }
@@ -329,7 +352,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         inst.SetNop();
     }
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
-        const auto dst = parseDst();
+        const auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
         inst.SetAddq(getBits(9, 3), *dst, getSize0());
     }
@@ -341,11 +364,23 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         dst.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
         inst.SetAbcd(src, dst);
     }
+    else if (applyMask(0b1111'0000'1100'0000) == 0b1101'0000'1100'0000) {
+        const auto size = getBit(8) ? Long : Word;
+
+        auto src = parseTargetWithSize(size);
+        if (!src) { return tl::unexpected(src.error()); }
+        src->SetSize(size);
+
+        TTarget dst;
+        dst.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
+
+        inst.SetAdda(*src, dst, size);
+    }
     else if (applyMask(0b1111'0000'0000'0000) == 0b1101'0000'0000'0000) {
         TTarget src;
         src.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
 
-        auto dst = parseDst();
+        auto dst = parseTarget();
         if (!dst) { return tl::unexpected(dst.error()); }
         if (!getBit(8)) {
             std::swap(src, *dst);
