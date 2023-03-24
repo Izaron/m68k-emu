@@ -27,19 +27,22 @@ bool GetMostSignificantBit(Value value) {
 
 void TInstruction::SetNop() {
     Kind_ = NopKind;
+    HasSrc_ = HasDst_ = false;
 }
 
 void TInstruction::SetAbcd(TTarget src, TTarget dst) {
     Kind_ = AbcdKind;
-    Value_.AbcdData.Src = src;
-    Value_.AbcdData.Dst = dst;
+    Src_ = src;
+    Dst_ = dst;
+    HasSrc_ = HasDst_ = true;
 }
 
 void TInstruction::SetAdd(TTarget src, TTarget dst, ESize size) {
     Kind_ = AddKind;
-    Value_.AddData.Src = src;
-    Value_.AddData.Dst = dst;
-    Value_.AddData.Size = size;
+    Src_ = src;
+    Dst_ = dst;
+    Size_ = size;
+    HasSrc_ = HasDst_ = true;
 }
 
 void TInstruction::Execute(NEmulator::TContext ctx) {
@@ -48,12 +51,8 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case AbcdKind: {
-            auto& data = Value_.AbcdData;
-            data.Src.PreWork(ctx);
-            data.Dst.PreWork(ctx);
-
-            const TByte srcVal = data.Src.ReadByte(ctx);
-            const TByte dstVal = data.Dst.ReadByte(ctx);
+            const TByte srcVal = Src_.ReadByte(ctx);
+            const TByte dstVal = Dst_.ReadByte(ctx);
             const TByte extendFlag = ctx.Registers.GetExtendFlag();
 
             const TWord binaryResult = srcVal + dstVal + extendFlag;
@@ -80,7 +79,7 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
 
             const TWord result = ((hval << 4) + lval) & 0xFF;
 
-            data.Dst.WriteByte(ctx, result);
+            Dst_.WriteByte(ctx, result);
 
             ctx.Registers.SetNegativeFlag(GetMostSignificantBit<TByte>(result));
             ctx.Registers.SetCarryFlag(carry);
@@ -89,19 +88,11 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             if (result != 0) {
                 ctx.Registers.SetZeroFlag(result == 0);
             }
-
-            data.Src.PostWork(ctx);
-            data.Dst.PostWork(ctx);
-
             break;
         }
         case AddKind: {
-            auto& data = Value_.AbcdData;
-            data.Src.PreWork(ctx);
-            data.Dst.PreWork(ctx);
-
-            const TByte srcVal = data.Src.ReadByte(ctx);
-            const TByte dstVal = data.Dst.ReadByte(ctx);
+            const TByte srcVal = Src_.ReadByte(ctx);
+            const TByte dstVal = Dst_.ReadByte(ctx);
 
             const TWord result = TWord{0} + srcVal + dstVal;
             const bool carry = result & ~0xFF;
@@ -111,17 +102,21 @@ void TInstruction::Execute(NEmulator::TContext ctx) {
             const bool resultMsb = GetMostSignificantBit<TByte>(result);
             const bool overflow = (srcMsb && dstMsb && !resultMsb) || (!srcMsb && !dstMsb && resultMsb);
 
-            data.Dst.WriteByte(ctx, result);
+            Dst_.WriteByte(ctx, result);
             ctx.Registers.SetNegativeFlag(resultMsb);
             ctx.Registers.SetCarryFlag(carry);
             ctx.Registers.SetExtendFlag(carry);
             ctx.Registers.SetOverflowFlag(overflow);
             ctx.Registers.SetZeroFlag((result & 0xFF) == 0);
-
-            data.Src.PostWork(ctx);
-            data.Dst.PostWork(ctx);
             break;
         }
+    }
+
+    if (HasSrc_) {
+        Src_.TryIncrementAddress(ctx);
+    }
+    if (HasDst_) {
+        Dst_.TryIncrementAddress(ctx);
     }
 }
 

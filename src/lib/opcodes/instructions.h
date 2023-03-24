@@ -29,19 +29,13 @@ public:
     static TInstruction Decode(NEmulator::TContext ctx);
 
 private:
-    union {
-        struct {
-            TTarget Src;
-            TTarget Dst;
-        } AbcdData;
-        struct {
-            TTarget Src;
-            TTarget Dst;
-            ESize Size;
-        } AddData;
-    } Value_;
-
     EKind Kind_;
+    TTarget Src_;
+    TTarget Dst_;
+    ESize Size_;
+
+    bool HasSrc_;
+    bool HasDst_;
 };
 
 } // namespace NOpcodes

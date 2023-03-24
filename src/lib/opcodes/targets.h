@@ -21,6 +21,7 @@ public:
         ImmediateKind,
     };
 
+    // builder methods
     void SetDataRegister(uint8_t index);
     void SetAddressRegister(uint8_t index);
     void SetAddress(uint8_t index);
@@ -35,16 +36,16 @@ public:
     void SetImmediate(TLong address);
 
     // pre-work and post-work
-    void PreWork(NEmulator::TContext ctx);
-    void PostWork(NEmulator::TContext ctx);
+    void TryDecrementAddress(NEmulator::TContext ctx);
+    void TryIncrementAddress(NEmulator::TContext ctx);
 
-    // read data methods
+    // read methods
     TDataHolder Read(NEmulator::TContext ctx, TAddressType size);
     TByte ReadByte(NEmulator::TContext ctx);
     TWord ReadWord(NEmulator::TContext ctx);
     TLong ReadLong(NEmulator::TContext ctx);
 
-    // write data methods
+    // write methods
     void Write(NEmulator::TContext ctx, TDataView data);
     void WriteByte(NEmulator::TContext ctx, TByte b);
     void WriteWord(NEmulator::TContext ctx, TWord w);

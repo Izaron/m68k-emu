@@ -249,7 +249,7 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int skipFiles = 1;
+    int skipFiles = 0;
     for (const auto& path : paths) {
         if (skipFiles) {
             --skipFiles;

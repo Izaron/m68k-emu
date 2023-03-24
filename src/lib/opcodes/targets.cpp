@@ -13,14 +13,7 @@ TLong& GetAReg(NRegisters::TRegisters& r, int index) {
     if (index < 7) {
         return r.A[index];
     } else {
-        if (r.GetSupervisorFlag()) {
-            //--r.SSP;
-            return r.SSP;
-        } else {
-            //--r.USP;
-            return r.USP;
-        }
-        //return r.GetSupervisorFlag() ? r.SSP : r.USP;
+        return r.GetSupervisorFlag() ? r.SSP : r.USP;
     }
 }
 
@@ -109,7 +102,7 @@ void TTarget::SetImmediate(TLong address) {
     Address_ = address;
 }
 
-void TTarget::PreWork(NEmulator::TContext ctx) {
+void TTarget::TryDecrementAddress(NEmulator::TContext ctx) {
     if (Kind_ == AddressDecrementKind) {
         auto& reg = GetAReg(ctx.Registers, Index_);
         --reg;
@@ -123,7 +116,7 @@ void TTarget::PreWork(NEmulator::TContext ctx) {
     }
 }
 
-void TTarget::PostWork(NEmulator::TContext ctx) {
+void TTarget::TryIncrementAddress(NEmulator::TContext ctx) {
     if (Kind_ == AddressIncrementKind) {
         auto& reg = GetAReg(ctx.Registers, Index_);
         ++reg;
@@ -138,6 +131,8 @@ void TTarget::PostWork(NEmulator::TContext ctx) {
 }
 
 TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
+    TryDecrementAddress(ctx);
+
     const auto readRegister = [size](TLong reg) {
         TDataHolder data;
         for (int i = 0; i < size; ++i) {
