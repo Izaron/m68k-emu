@@ -1,4 +1,5 @@
 add_subdirectory(emulator)
+add_subdirectory(error)
 add_subdirectory(memory)
 add_subdirectory(opcodes)
 add_subdirectory(registers)

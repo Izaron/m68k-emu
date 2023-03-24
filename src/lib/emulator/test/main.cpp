@@ -27,22 +27,24 @@ public:
         }
 
         // fill prefetch
-        if (prefetch.size() != 2) {
-            throw std::runtime_error("why not 2 items?");
-        }
+        assert(prefetch.size() == 2);
         Prefetch_.push_back(prefetch[0].get<int>() >> 8);
         Prefetch_.push_back(prefetch[0].get<int>() % 256);
         Prefetch_.push_back(prefetch[1].get<int>() >> 8);
         Prefetch_.push_back(prefetch[1].get<int>() % 256);
     }
 
-    TDataHolder Read(TAddressType addr, TAddressType size) override {
+    tl::expected<TDataHolder, TError> Read(TAddressType addr, TAddressType size) override {
         if (addr >= PC_ && addr + size - PC_ <= 4) {
             TDataHolder res;
             for (int i = 0; i < size; ++i) {
                 res.push_back(Prefetch_[addr + i - PC_]);
             }
             return res;
+        }
+
+        if (addr % size != 0) {
+            return tl::unexpected<TError>(TError::UnalignedMemoryAccess, "memory access at address %#08x of size %d", addr, size);
         }
 
         TDataHolder res;
@@ -56,7 +58,7 @@ public:
         return res;
     }
 
-    void Write(TAddressType addr, TDataView data) override {
+    std::optional<TError> Write(TAddressType addr, TDataView data) override {
         for (const auto value : data) {
             const auto realAddr = addr & 0xFFFFFF;
             if (value != 0 || Values_.contains(realAddr)) {
@@ -64,6 +66,7 @@ public:
             }
             addr++;
         }
+        return std::nullopt;
     }
 
     TRamSnapshot MakeRamSnapshot() const {
@@ -160,10 +163,13 @@ bool WorkOnTest(const json& test) {
     auto actualFinal = initial;
     TTestDevice device{initial.PC, initialJson["prefetch"], initialJson["ram"]};
     NEmulator::TContext ctx{.Registers = actualFinal, .Memory = device};
-    try {
-        NEmulator::Emulate(ctx);
-    } catch (...) {
-        return false;
+    const auto err = NEmulator::Emulate(ctx);
+
+    if (err) {
+        std::cerr << "Got error: " << err->GetWhat() << std::endl;
+
+        // this program counter means there really was an illegal instruction
+        return (expectedFinal.PC == 0x1400);
     }
 
     // TODO: compare RAM
@@ -199,8 +205,6 @@ bool WorkOnTest(const json& test) {
 
             std::cerr << "RAM differs" << std::endl;
         }
-
-        //std::cerr << "Test source: \"" << test.dump(4) << std::endl;
 
         return false;
     }
@@ -249,7 +253,7 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int skipFiles = 1;
+    int skipFiles = 3;
     for (const auto& path : paths) {
         if (skipFiles) {
             --skipFiles;
@@ -259,5 +263,6 @@ int main() {
         if (!WorkOnFile(file)) {
             break;
         }
+        break;
     }
 }

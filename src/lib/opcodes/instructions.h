@@ -28,9 +28,9 @@ public:
     void SetAddq(TWord data, TTarget dst, ESize size);
     void SetNop();
 
-    void Execute(NEmulator::TContext ctx);
+    [[nodiscard]] std::optional<TError> Execute(NEmulator::TContext ctx);
 
-    static TInstruction Decode(NEmulator::TContext ctx);
+    static tl::expected<TInstruction, TError> Decode(NEmulator::TContext ctx);
 
 private:
     EKind Kind_;

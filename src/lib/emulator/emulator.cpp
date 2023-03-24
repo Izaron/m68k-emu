@@ -4,9 +4,12 @@
 
 namespace NEmulator {
 
-void Emulate(TContext ctx) {
+std::optional<TError> Emulate(TContext ctx) {
     auto inst = NOpcodes::TInstruction::Decode(ctx);
-    inst.Execute(ctx);
+    if (!inst) {
+        return inst.error();
+    }
+    return inst->Execute(ctx);
 }
 
 } // namespace NEmulator

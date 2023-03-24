@@ -21,43 +21,40 @@ public:
         ImmediateKind,
     };
 
-    // builder methods
-    void SetDataRegister(uint8_t index);
-    void SetAddressRegister(uint8_t index);
-    void SetAddress(uint8_t index);
-    void SetAddressIncrement(uint8_t index);
-    void SetAddressDecrement(uint8_t index);
-    void SetAddressDisplacement(uint8_t index, TWord extWord0);
-    void SetAddressIndex(uint8_t index, TWord extWord0);
-    void SetProgramCounterDisplacement(TWord extWord0);
-    void SetProgramCounterIndex(TWord extWord0);
-    void SetAbsoluteShort(TWord extWord0);
-    void SetAbsoluteLong(TWord extWord0, TWord extWord1);
-    void SetImmediate(TLong address);
+    TTarget& SetKind(EKind kind);
+    TTarget& SetSize(uint8_t index);
+    TTarget& SetIndex(uint8_t index);
+    TTarget& SetExtWord0(TWord extWord0);
+    TTarget& SetExtWord1(TWord extWord1);
+    TTarget& SetAddress(TLong address);
 
     // pre-work and post-work
     void TryDecrementAddress(NEmulator::TContext ctx);
     void TryIncrementAddress(NEmulator::TContext ctx);
 
+    // helper methods
+    EKind GetKind() const { return Kind_; }
+
     // read methods
-    TDataHolder Read(NEmulator::TContext ctx, TAddressType size);
-    TLongLong ReadAsLongLong(NEmulator::TContext ctx, TAddressType size);
-    TByte ReadByte(NEmulator::TContext ctx);
-    TWord ReadWord(NEmulator::TContext ctx);
-    TLong ReadLong(NEmulator::TContext ctx);
+    tl::expected<TDataHolder, TError> Read(NEmulator::TContext ctx, TAddressType size);
+    tl::expected<TLongLong, TError> ReadAsLongLong(NEmulator::TContext ctx, TAddressType size);
+    tl::expected<TByte, TError> ReadByte(NEmulator::TContext ctx);
+    tl::expected<TWord, TError> ReadWord(NEmulator::TContext ctx);
+    tl::expected<TLong, TError> ReadLong(NEmulator::TContext ctx);
 
     // write methods
-    void Write(NEmulator::TContext ctx, TDataView data);
-    void WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size);
-    void WriteByte(NEmulator::TContext ctx, TByte b);
-    void WriteWord(NEmulator::TContext ctx, TWord w);
-    void WriteLong(NEmulator::TContext ctx, TLong l);
+    [[nodiscard]] std::optional<TError> Write(NEmulator::TContext ctx, TDataView data);
+    [[nodiscard]] std::optional<TError> WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size);
+    [[nodiscard]] std::optional<TError> WriteByte(NEmulator::TContext ctx, TByte b);
+    [[nodiscard]] std::optional<TError> WriteWord(NEmulator::TContext ctx, TWord w);
+    [[nodiscard]] std::optional<TError> WriteLong(NEmulator::TContext ctx, TLong l);
 
 private:
     TLong GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress);
 
 private:
     EKind Kind_;
+    uint8_t Size_;
     uint8_t Index_;
     TWord ExtWord0_;
     TWord ExtWord1_;

@@ -1,7 +1,7 @@
 #include "targets.h"
 
+#include <algorithm>
 #include <type_traits>
-#include <stdexcept>
 
 namespace NOpcodes {
 
@@ -39,98 +39,55 @@ int8_t GetScaleValue(int8_t mode) {
 
 } // namespace
 
-void TTarget::SetDataRegister(uint8_t index) {
-    Kind_ = DataRegisterKind;
-    Index_ = index;
+TTarget& TTarget::SetKind(EKind kind) {
+    Kind_ = kind;
+    return *this;
 }
 
-void TTarget::SetAddressRegister(uint8_t index) {
-    Kind_ = AddressRegisterKind;
-    Index_ = index;
+TTarget& TTarget::SetSize(uint8_t size) {
+    Size_ = size;
+    return *this;
 }
 
-void TTarget::SetAddress(uint8_t index) {
-    Kind_ = AddressKind;
+TTarget& TTarget::SetIndex(uint8_t index) {
     Index_ = index;
+    return *this;
 }
 
-void TTarget::SetAddressIncrement(uint8_t index) {
-    Kind_ = AddressIncrementKind;
-    Index_ = index;
-}
-
-void TTarget::SetAddressDecrement(uint8_t index) {
-    Kind_ = AddressDecrementKind;
-    Index_ = index;
-}
-
-void TTarget::SetAddressDisplacement(uint8_t index, TWord extWord0) {
-    Kind_ = AddressDisplacementKind;
-    Index_ = index;
+TTarget& TTarget::SetExtWord0(TWord extWord0) {
     ExtWord0_ = extWord0;
+    return *this;
 }
 
-void TTarget::SetAddressIndex(uint8_t index, TWord extWord0) {
-    Kind_ = AddressIndexKind;
-    Index_ = index;
-    ExtWord0_ = extWord0;
-}
-
-void TTarget::SetProgramCounterDisplacement(TWord extWord0) {
-    Kind_ = ProgramCounterDisplacementKind;
-    ExtWord0_ = extWord0;
-}
-
-void TTarget::SetProgramCounterIndex(TWord extWord0) {
-    Kind_ = ProgramCounterIndexKind;
-    ExtWord0_ = extWord0;
-}
-
-void TTarget::SetAbsoluteShort(TWord extWord0) {
-    Kind_ = AbsoluteShortKind;
-    ExtWord0_ = extWord0;
-}
-
-void TTarget::SetAbsoluteLong(TWord extWord0, TWord extWord1) {
-    Kind_ = AbsoluteLongKind;
-    ExtWord0_ = extWord0;
+TTarget& TTarget::SetExtWord1(TWord extWord1) {
     ExtWord1_ = extWord1;
+    return *this;
 }
 
-void TTarget::SetImmediate(TLong address) {
-    Kind_ = ImmediateKind;
+TTarget& TTarget::SetAddress(TLong address) {
     Address_ = address;
+    return *this;
 }
 
 void TTarget::TryDecrementAddress(NEmulator::TContext ctx) {
     if (Kind_ == AddressDecrementKind) {
         auto& reg = GetAReg(ctx.Registers, Index_);
-        --reg;
 
-        // If the address register is the
-        // stack pointer and the operand size is byte, the address is decremented by two to keep the
-        // stack pointer aligned to a word boundary
-        if (Index_ == 7) {
-            --reg;
-        }
+        // stack pointer should be aligned to a word boundary
+        reg -= (Index_ == 7) ? std::max((int)Size_, 2) : Size_;
     }
 }
 
 void TTarget::TryIncrementAddress(NEmulator::TContext ctx) {
     if (Kind_ == AddressIncrementKind) {
         auto& reg = GetAReg(ctx.Registers, Index_);
-        ++reg;
 
-        // If the address register is the
-        // stack pointer and the operand size is byte, the address is decremented by two to keep the
-        // stack pointer aligned to a word boundary
-        if (Index_ == 7) {
-            ++reg;
-        }
+        // stack pointer should be aligned to a word boundary
+        reg += (Index_ == 7) ? std::max((int)Size_, 2) : Size_;
     }
 }
 
-TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
+tl::expected<TDataHolder, TError> TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
     TryDecrementAddress(ctx);
 
     const auto readRegister = [size](TLong reg) {
@@ -139,11 +96,15 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
             data.push_back(reg & 0xFF);
             reg >>= 8;
         }
-        // TODO: reverse `data`?
+        std::reverse(data.begin(), data.end());
         return data;
     };
 
     TDataHolder data;
+
+#define GET_DATA_SAFE \
+    if (!dataOrError) { return tl::unexpected(dataOrError.error()); } \
+    data = std::move(*dataOrError)
 
     switch (Kind_) {
         case DataRegisterKind: {
@@ -158,78 +119,86 @@ TDataHolder TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
         case AddressIncrementKind:
         case AddressDecrementKind: {
             const auto reg = GetAReg(ctx.Registers, Index_);
-            data = ctx.Memory.Read(reg, size);
+            auto dataOrError = ctx.Memory.Read(reg, size);
+            GET_DATA_SAFE;
             break;
         }
         case AddressDisplacementKind: {
             const auto reg = GetAReg(ctx.Registers, Index_);
-            data = ctx.Memory.Read(reg + static_cast<TSignedWord>(ExtWord0_), size);
+            auto dataOrError = ctx.Memory.Read(reg + static_cast<TSignedWord>(ExtWord0_), size);
+            GET_DATA_SAFE;
             break;
         }
         case AddressIndexKind: {
             const TLong addr = GetIndexedAddress(ctx, GetAReg(ctx.Registers, Index_));
-            data = ctx.Memory.Read(addr, size);
+            auto dataOrError = ctx.Memory.Read(addr, size);
+            GET_DATA_SAFE;
             break;
         }
         case ProgramCounterDisplacementKind: {
-            data = ctx.Memory.Read(ctx.Registers.PC - 2 + static_cast<TSignedWord>(ExtWord0_), size);
+            auto dataOrError = ctx.Memory.Read(ctx.Registers.PC - 2 + static_cast<TSignedWord>(ExtWord0_), size);
+            GET_DATA_SAFE;
             break;
         }
         case ProgramCounterIndexKind: {
             const TLong addr = GetIndexedAddress(ctx, ctx.Registers.PC - 2);
-            data = ctx.Memory.Read(addr, size);
+            auto dataOrError = ctx.Memory.Read(addr, size);
+            GET_DATA_SAFE;
             break;
         }
         case AbsoluteShortKind: {
-            data = ctx.Memory.Read(static_cast<TSignedWord>(ExtWord0_), size);
+            auto dataOrError = ctx.Memory.Read(static_cast<TSignedWord>(ExtWord0_), size);
+            GET_DATA_SAFE;
             break;
         }
         case AbsoluteLongKind: {
-            data = ctx.Memory.Read((ExtWord0_ << 16) + ExtWord1_, size);
+            auto dataOrError = ctx.Memory.Read((ExtWord0_ << 16) + ExtWord1_, size);
+            GET_DATA_SAFE;
             break;
         }
         case ImmediateKind: {
-            data = ctx.Memory.Read(Address_, size);
+            auto dataOrError = ctx.Memory.Read(Address_, size);
+            GET_DATA_SAFE;
             break;
-        }
-        default: {
-            throw std::runtime_error("target not supported");
         }
     }
 
     return data;
 }
 
-TLongLong TTarget::ReadAsLongLong(NEmulator::TContext ctx, TAddressType size) {
-    const auto data = Read(ctx, size);
-    TLongLong res = data[0];
-    for (int i = 1; i < size; ++i) {
-        res = (res << 8) + data[i];
-    }
-    return res;
+tl::expected<TLongLong, TError> TTarget::ReadAsLongLong(NEmulator::TContext ctx, TAddressType size) {
+    return Read(ctx, size).map([size](auto&& data) {
+        TLongLong res = data[0];
+        for (int i = 1; i < size; ++i) {
+            res = (res << 8) + data[i];
+        }
+        return res;
+    });
 }
 
-TByte TTarget::ReadByte(NEmulator::TContext ctx) {
-    return Read(ctx, /*size=*/1)[0];
+tl::expected<TByte, TError> TTarget::ReadByte(NEmulator::TContext ctx) {
+    return Read(ctx, /*size=*/1).map([](auto&& data) { return data[0]; });
 }
 
-TWord TTarget::ReadWord(NEmulator::TContext ctx) {
-    const auto data = Read(ctx, /*size=*/2);
-    TWord res = data[0];
-    res = (res << 8) + data[1];
-    return res;
+tl::expected<TWord, TError> TTarget::ReadWord(NEmulator::TContext ctx) {
+    return Read(ctx, /*size=*/2).map([](auto&& data) {
+        TWord res = data[0];
+        res = (res << 8) + data[1];
+        return res;
+    });
 }
 
-TLong TTarget::ReadLong(NEmulator::TContext ctx) {
-    const auto data = Read(ctx, /*size=*/4);
-    TLong res = data[0];
-    res = (res << 8) + data[1];
-    res = (res << 8) + data[2];
-    res = (res << 8) + data[3];
-    return res;
+tl::expected<TLong, TError> TTarget::ReadLong(NEmulator::TContext ctx) {
+    return Read(ctx, /*size=*/4).map([](auto&& data) {
+        TLong res = data[0];
+        res = (res << 8) + data[1];
+        res = (res << 8) + data[2];
+        res = (res << 8) + data[3];
+        return res;
+    });
 }
 
-void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
+std::optional<TError> TTarget::Write(NEmulator::TContext ctx, TDataView data) {
     const auto writeRegister = [data](TLong& reg) {
         int shift = 0;
         int lsb = 0;
@@ -257,47 +226,38 @@ void TTarget::Write(NEmulator::TContext ctx, TDataView data) {
         case AddressIncrementKind:
         case AddressDecrementKind: {
             const auto reg = GetAReg(ctx.Registers, Index_);
-            ctx.Memory.Write(reg, data);
-            break;
+            return ctx.Memory.Write(reg, data);
         }
         case AddressDisplacementKind: {
             const auto reg = GetAReg(ctx.Registers, Index_);
-            ctx.Memory.Write(reg + static_cast<TSignedWord>(ExtWord0_), data);
-            break;
+            return ctx.Memory.Write(reg + static_cast<TSignedWord>(ExtWord0_), data);
         }
         case AddressIndexKind: {
             const TLong addr = GetIndexedAddress(ctx, GetAReg(ctx.Registers, Index_));
-            ctx.Memory.Write(addr, data);
-            break;
+            return ctx.Memory.Write(addr, data);
         }
         case ProgramCounterDisplacementKind: {
-            ctx.Memory.Write(ctx.Registers.PC - 2 + static_cast<TSignedWord>(ExtWord0_), data);
-            break;
+            return ctx.Memory.Write(ctx.Registers.PC - 2 + static_cast<TSignedWord>(ExtWord0_), data);
         }
         case ProgramCounterIndexKind: {
             const TLong addr = GetIndexedAddress(ctx, ctx.Registers.PC - 2);
-            ctx.Memory.Write(addr, data);
-            break;
+            return ctx.Memory.Write(addr, data);
         }
         case AbsoluteShortKind: {
-            ctx.Memory.Write(static_cast<TSignedWord>(ExtWord0_), data);
-            break;
+            return ctx.Memory.Write(static_cast<TSignedWord>(ExtWord0_), data);
         }
         case AbsoluteLongKind: {
-            ctx.Memory.Write((ExtWord0_ << 16) + ExtWord1_, data);
-            break;
+            return ctx.Memory.Write((ExtWord0_ << 16) + ExtWord1_, data);
         }
         case ImmediateKind: {
-            ctx.Memory.Write(Address_, data);
-            break;
-        }
-        default: {
-            break;
+            return ctx.Memory.Write(Address_, data);
         }
     }
+
+    return std::nullopt;
 }
 
-void TTarget::WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size) {
+std::optional<TError> TTarget::WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size) {
     switch (size) {
         case 1: return WriteByte(ctx, value);
         case 2: return WriteWord(ctx, value);
@@ -306,27 +266,29 @@ void TTarget::WriteSized(NEmulator::TContext ctx, TLong value, TAddressType size
     }
 }
 
-void TTarget::WriteByte(NEmulator::TContext ctx, TByte b) {
+std::optional<TError> TTarget::WriteByte(NEmulator::TContext ctx, TByte b) {
     TDataHolder data;
     data.emplace_back(b);
     return Write(ctx, data);
 }
 
-void TTarget::WriteWord(NEmulator::TContext ctx, TWord w) {
+std::optional<TError> TTarget::WriteWord(NEmulator::TContext ctx, TWord w) {
     TDataHolder data;
     for (int i = 0; i < 2; ++i) {
         data.emplace_back(w & 0xFF);
         w >>= 8;
     }
+    std::reverse(data.begin(), data.end());
     return Write(ctx, data);
 }
 
-void TTarget::WriteLong(NEmulator::TContext ctx, TLong l) {
+std::optional<TError> TTarget::WriteLong(NEmulator::TContext ctx, TLong l) {
     TDataHolder data;
     for (int i = 0; i < 4; ++i) {
         data.emplace_back(l & 0xFF);
         l >>= 8;
     }
+    std::reverse(data.begin(), data.end());
     return Write(ctx, data);
 }
 

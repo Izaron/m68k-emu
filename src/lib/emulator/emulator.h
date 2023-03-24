@@ -1,5 +1,6 @@
 #pragma once
 
+#include <lib/error/error.h>
 #include <lib/memory/i_device.h>
 #include <lib/registers/registers.h>
 
@@ -10,6 +11,6 @@ struct TContext {
     NMemory::IDevice& Memory;
 };
 
-void Emulate(TContext ctx);
+std::optional<TError> Emulate(TContext ctx);
 
 } // namespace NEmulator
