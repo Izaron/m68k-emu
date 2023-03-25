@@ -582,37 +582,16 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return parseTargetWithSize(getSize0());
     };
 
+#define PARSE_TARGET_SAFE                               \
+    auto dst = parseTarget();                           \
+    if (!dst) { return tl::unexpected(dst.error()); }
+
     // decode the opcode
     TInstruction inst;
 
     /*
      * Bit manipulation opcodes: BTST, BCHG, BCLR, BSET
      */
-    const auto tryParseBitOpcode = [&](EKind kind, TWord registerMask, TWord immediateMask) -> tl::expected<bool, TError> {
-        if (applyMask(0b1111'0001'1100'0000) == registerMask) {
-            auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-
-            auto dst = parseTarget();
-            if (!dst) { return tl::unexpected(dst.error()); }
-            dst->SetSize(Byte);
-
-            inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
-            return true;
-        }
-        if (applyMask(0b1111'1111'1100'0000) == immediateMask) {
-            auto& pc = ctx.Registers.PC;
-            auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
-            pc += 2;
-
-            auto dst = parseTarget();
-            if (!dst) { return tl::unexpected(dst.error()); }
-            dst->SetSize(Byte);
-
-            inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
-        }
-        return false;
-    };
-
     const auto tryParseBitOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord, TWord>;
         constexpr std::array<TCase, 4> cases{
@@ -622,9 +601,25 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             std::make_tuple(BsetKind, 0b0000'0001'1100'0000, 0b0000'1000'1100'0000),
         };
         for (auto [kind, registerMask, immediateMask] : cases) {
-            auto res = tryParseBitOpcode(kind, registerMask, immediateMask);
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return true; }
+            if (applyMask(0b1111'0001'1100'0000) == registerMask) {
+                auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+
+                PARSE_TARGET_SAFE;
+                dst->SetSize(Byte);
+
+                inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
+                return true;
+            }
+            if (applyMask(0b1111'1111'1100'0000) == immediateMask) {
+                auto& pc = ctx.Registers.PC;
+                auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
+                pc += 2;
+
+                PARSE_TARGET_SAFE;
+                dst->SetSize(Byte);
+
+                inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
+            }
         }
         return false;
     };
@@ -632,16 +627,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     /*
      * Simple operations: NEG, NEGX, CLR, NOT
      */
-    const auto tryParseSimpleOpcode = [&](EKind kind, TWord mask) -> tl::expected<bool, TError> {
-        if (applyMask(0b1111'1111'0000'0000) == mask) {
-            auto dst = parseTarget();
-            if (!dst) { return tl::unexpected(dst.error()); }
-            inst.SetKind(kind).SetDst(*dst).SetSize(getSize0());
-            return true;
-        }
-        return false;
-    };
-
     const auto tryParseSimpleOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord>;
         constexpr std::array<TCase, 4> cases{
@@ -651,9 +636,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             std::make_tuple(NotKind,  0b0100'0110'0000'0000),
         };
         for (auto [kind, mask] : cases) {
-            auto res = tryParseSimpleOpcode(kind, mask);
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return true; }
+            if (applyMask(0b1111'1111'0000'0000) == mask) {
+                PARSE_TARGET_SAFE;
+                inst.SetKind(kind).SetDst(*dst).SetSize(getSize0());
+                return true;
+            }
         }
         return false;
     };
@@ -661,45 +648,39 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     /*
      * Bit shift operations: ASL, ASR
      */
-    const auto tryParseShiftOpcode = [&](EKind leftKind, EKind rightKind, int index) -> tl::expected<bool, TError> {
-        if (applyMask(0b1111'1000'1100'0000) == 0b1110'0000'1100'0000 && getBits(9, 2) == index) {
-            // operation on any memory, shift by 1
-            auto kind = getBit(8) ? leftKind : rightKind;
-            auto dst = parseTargetWithSize(Word);
-            if (!dst) { return tl::unexpected(dst.error()); }
-            inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
-            return true;
-        }
-        if (applyMask(0b1111'0000'0000'0000) == 0b1110'0000'0000'0000 && getBits(3, 2) == index && getBits(6, 2) != 3) {
-            // operation on Dn
-            auto kind = getBit(8) ? leftKind : rightKind;
-            uint8_t rotation = getBits(9, 3);
-            auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
-
-            inst.SetKind(kind).SetDst(dst).SetSize(getSize0());
-            if (getBit(5)) {
-                // shift count is in the data register
-                auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(rotation);
-                inst.SetSrc(src);
-            } else {
-                // shift count is immediate
-                inst.SetData(rotation);
-            }
-            return true;
-        }
-        return false;
-    };
-
     const auto tryParseShiftOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, EKind, int>;
         constexpr std::array<TCase, 2> cases{
             std::make_tuple(AslKind, AsrKind, 0),
             std::make_tuple(LslKind, LsrKind, 1),
         };
+
         for (auto [leftKind, rightKind, index] : cases) {
-            auto res = tryParseShiftOpcode(leftKind, rightKind, index);
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return true; }
+            if (applyMask(0b1111'1000'1100'0000) == 0b1110'0000'1100'0000 && getBits(9, 2) == index) {
+                // operation on any memory, shift by 1
+                auto kind = getBit(8) ? leftKind : rightKind;
+                auto dst = parseTargetWithSize(Word);
+                if (!dst) { return tl::unexpected(dst.error()); }
+                inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
+                return true;
+            }
+            if (applyMask(0b1111'0000'0000'0000) == 0b1110'0000'0000'0000 && getBits(3, 2) == index && getBits(6, 2) != 3) {
+                // operation on Dn
+                auto kind = getBit(8) ? leftKind : rightKind;
+                uint8_t rotation = getBits(9, 3);
+                auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
+
+                inst.SetKind(kind).SetDst(dst).SetSize(getSize0());
+                if (getBit(5)) {
+                    // shift count is in the data register
+                    auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(rotation);
+                    inst.SetSrc(src);
+                } else {
+                    // shift count is immediate
+                    inst.SetData(rotation);
+                }
+                return true;
+            }
         }
         return false;
     };
@@ -724,8 +705,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
         pc += (getSize0() == Long) ? 4 : 2;
 
-        const auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
+        PARSE_TARGET_SAFE;
         inst.SetKind(AddiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'1111'0000'0000) == 0b0000'0010'0000'0000) {
@@ -733,13 +713,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
         pc += (getSize0() == Long) ? 4 : 2;
 
-        const auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
+        PARSE_TARGET_SAFE;
         inst.SetKind(AndiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
-        const auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
+        PARSE_TARGET_SAFE;
         inst.SetKind(AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0001'1111'0000) == 0b1100'0001'0000'0000) {
@@ -767,21 +745,16 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b1100'0000'0000'0000) {
         auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-
-        auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
+        PARSE_TARGET_SAFE;
 
         if (!getBit(8)) {
             std::swap(src, *dst);
         }
-
         inst.SetKind(AndKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b1101'0000'0000'0000) {
         auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-
-        auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
+        PARSE_TARGET_SAFE;
 
         if (!getBit(8)) {
             std::swap(src, *dst);
@@ -808,21 +781,18 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
     }
     else {
-        {
-            auto res = tryParseBitOpcodes();
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return inst; }
+
+#define TRY_PARSE(func)                                         \
+        {                                                       \
+            auto res = func();                                  \
+            if (!res) { return tl::unexpected(res.error()); }   \
+            if (*res) { return inst; }                          \
         }
-        {
-            auto res = tryParseSimpleOpcodes();
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return inst; }
-        }
-        {
-            auto res = tryParseShiftOpcodes();
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return inst; }
-        }
+
+        TRY_PARSE(tryParseBitOpcodes);
+        TRY_PARSE(tryParseSimpleOpcodes);
+        TRY_PARSE(tryParseShiftOpcodes);
+
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
     }
 
