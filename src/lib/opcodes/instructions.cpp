@@ -312,8 +312,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                     } else {
                         lastBitShifted = result & 1;
                     }
-                    // preserve the most significant bit
-                    result = (result >> 1) | (result & (1LL << (BitCount(Size_) - 1)));
+                    if (isArithmetic) {
+                        // preserve the most significant bit
+                        result = (result >> 1) | (result & (1LL << (BitCount(Size_) - 1)));
+                    } else {
+                        result >>= 1;
+                    }
                 }
                 bool newMsb = GetMsb(result, Size_);
                 if (curMsb != newMsb) {
