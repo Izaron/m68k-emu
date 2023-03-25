@@ -338,7 +338,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
-        case BchgKind: {
+        case BchgKind:
+        case BclrKind: {
             // read bit number
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
             auto bitNum = *srcVal;
@@ -359,7 +360,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
 
             const auto mask = 1LL << bitNum;
-            const auto newVal = val ^ mask;
+            auto newVal = val;
+            if (Kind_ == BchgKind) {
+                newVal ^= mask;
+            } else if (Kind_ == BclrKind) {
+                newVal &= newVal ^ mask;
+            }
 
             // update Z flag and write value
             ctx.Registers.SetZeroFlag(not (val & mask));
@@ -512,6 +518,45 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     // decode the opcode
     TInstruction inst;
 
+    const auto tryParseBitOpcode = [&](EKind kind, TWord registerMask, TWord immediateMask) -> tl::expected<bool, TError> {
+        if (applyMask(0b1111'0001'1100'0000) == registerMask) {
+            auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+
+            auto dst = parseTarget();
+            if (!dst) { return tl::unexpected(dst.error()); }
+            dst->SetSize(Byte);
+
+            inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
+            return true;
+        }
+        if (applyMask(0b1111'1111'1100'0000) == immediateMask) {
+            auto& pc = ctx.Registers.PC;
+            auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
+            pc += 2;
+
+            auto dst = parseTarget();
+            if (!dst) { return tl::unexpected(dst.error()); }
+            dst->SetSize(Byte);
+
+            inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
+        }
+        return false;
+    };
+
+    const auto tryParseBitOpcodes = [&]() -> tl::expected<bool, TError> {
+        {
+            auto res = tryParseBitOpcode(BchgKind, 0b0000'0001'0100'0000, 0b0000'1000'0100'0000);
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return true; }
+        }
+        {
+            auto res = tryParseBitOpcode(BclrKind, 0b0000'0001'1000'0000, 0b0000'1000'1000'0000);
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return true; }
+        }
+        return false;
+    };
+
     if (*word == 0b0100'1100'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -634,27 +679,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
         inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
     }
-    else if (applyMask(0b1111'0001'1100'0000) == 0b0000'0001'0100'0000) {
-        auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-
-        auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
-        dst->SetSize(Byte);
-
-        inst.SetKind(BchgKind).SetSrc(src).SetDst(*dst).SetSize(Byte);
-    }
-    else if (applyMask(0b1111'1111'1100'0000) == 0b0000'1000'0100'0000) {
-        auto& pc = ctx.Registers.PC;
-        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
-        pc += 2;
-
-        auto dst = parseTarget();
-        if (!dst) { return tl::unexpected(dst.error()); }
-        dst->SetSize(Byte);
-
-        inst.SetKind(BchgKind).SetSrc(src).SetDst(*dst).SetSize(Byte);
-    }
-    else {
+    else if (!tryParseBitOpcodes()) {
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
     }
 

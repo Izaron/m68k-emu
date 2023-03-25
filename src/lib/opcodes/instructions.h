@@ -23,6 +23,7 @@ public:
         AsrKind,        // ASR
         BccKind,        // Bcc
         BchgKind,       // BCHG
+        BclrKind,       // BCLR
         NopKind,        // NOP
     };
 
