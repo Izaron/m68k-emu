@@ -402,22 +402,40 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case ClrKind:
+        case NegKind:
         case NotKind: {
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
             auto result = *dstVal;
+
+            bool hasOverflow = false;
 
             if (Kind_ == ClrKind) {
                 result = 0;
             } else if (Kind_ == NotKind) {
                 result = ~result;
+            } else if (Kind_ == NegKind) {
+                result = ~result;
+
+                const auto mask0 = (1LL << (BitCount(Size_) - 1)) - 1;
+                const auto mask1 = (1LL << BitCount(Size_)) - 1;
+                if ((result & mask1) == mask0) {
+                    hasOverflow = true;
+                }
+                ++result;
             }
 
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            ctx.Registers.SetOverflowFlag(0);
-            ctx.Registers.SetCarryFlag(0);
+            if (Kind_ == NegKind) {
+                ctx.Registers.SetOverflowFlag(hasOverflow);
+                ctx.Registers.SetCarryFlag(IsCarry(result, Size_));
+                ctx.Registers.SetExtendFlag(ctx.Registers.GetCarryFlag());
+            } else {
+                ctx.Registers.SetOverflowFlag(0);
+                ctx.Registers.SetCarryFlag(0);
+            }
             break;
         }
         case NopKind: {
@@ -614,8 +632,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
     const auto tryParseSimpleOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord>;
-        constexpr std::array<TCase, 2> cases{
+        constexpr std::array<TCase, 3> cases{
             std::make_tuple(ClrKind, 0b0100'0010'0000'0000),
+            std::make_tuple(NegKind, 0b0100'0100'0000'0000),
             std::make_tuple(NotKind, 0b0100'0110'0000'0000),
         };
         for (auto [kind, mask] : cases) {
