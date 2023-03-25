@@ -585,6 +585,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     // decode the opcode
     TInstruction inst;
 
+    /*
+     * Bit manipulation opcodes: BTST, BCHG, BCLR, BSET
+     */
     const auto tryParseBitOpcode = [&](EKind kind, TWord registerMask, TWord immediateMask) -> tl::expected<bool, TError> {
         if (applyMask(0b1111'0001'1100'0000) == registerMask) {
             auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
@@ -626,6 +629,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
+    /*
+     * Simple operations: NEG, NEGX, CLR, NOT
+     */
     const auto tryParseSimpleOpcode = [&](EKind kind, TWord mask) -> tl::expected<bool, TError> {
         if (applyMask(0b1111'1111'0000'0000) == mask) {
             auto dst = parseTarget();
@@ -646,6 +652,51 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         };
         for (auto [kind, mask] : cases) {
             auto res = tryParseSimpleOpcode(kind, mask);
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return true; }
+        }
+        return false;
+    };
+
+    /*
+     * Bit shift operations: ASL, ASR
+     */
+    const auto tryParseShiftOpcode = [&](EKind leftKind, EKind rightKind, int index) -> tl::expected<bool, TError> {
+        if (applyMask(0b1111'1000'1100'0000) == 0b1110'0000'1100'0000 && getBits(9, 2) == index) {
+            // operation on any memory, shift by 1
+            auto kind = getBit(8) ? leftKind : rightKind;
+            auto dst = parseTargetWithSize(Word);
+            if (!dst) { return tl::unexpected(dst.error()); }
+            inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
+            return true;
+        }
+        if (applyMask(0b1111'0000'0000'0000) == 0b1110'0000'0000'0000 && getBits(3, 2) == index) {
+            // operation on Dn
+            auto kind = getBit(8) ? leftKind : rightKind;
+            uint8_t rotation = getBits(9, 3);
+            auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
+
+            inst.SetKind(kind).SetDst(dst).SetSize(getSize0());
+            if (getBit(5)) {
+                // shift count is in the data register
+                auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(rotation);
+                inst.SetSrc(src);
+            } else {
+                // shift count is immediate
+                inst.SetData(rotation);
+            }
+            return true;
+        }
+        return false;
+    };
+
+    const auto tryParseShiftOpcodes = [&]() -> tl::expected<bool, TError> {
+        using TCase = std::tuple<EKind, EKind, int>;
+        constexpr std::array<TCase, 1> cases{
+            std::make_tuple(AslKind, AsrKind, 0),
+        };
+        for (auto [leftKind, rightKind, index] : cases) {
+            auto res = tryParseShiftOpcode(leftKind, rightKind, index);
             if (!res) { return tl::unexpected(res.error()); }
             if (*res) { return true; }
         }
@@ -737,30 +788,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
         inst.SetKind(AddKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
-    else if (applyMask(0b1111'1110'1100'0000) == 0b1110'0000'1100'0000) {
-        // ASL/ASR on any memory, shift by 1
-        auto kind = getBit(8) ? AslKind : AsrKind;
-        auto dst = parseTargetWithSize(Word);
-        if (!dst) { return tl::unexpected(dst.error()); }
-
-        inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
-    }
-    else if (applyMask(0b1111'0000'0001'1000) == 0b1110'0000'0000'0000) {
-        // ASL/ASR on Dn
-        auto kind = getBit(8) ? AslKind : AsrKind;
-        uint8_t rotation = getBits(9, 3);
-        auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
-
-        inst.SetKind(kind).SetDst(dst).SetSize(getSize0());
-        if (getBit(5)) {
-            // shift count is in the data register
-            auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(rotation);
-            inst.SetSrc(src);
-        } else {
-            // shift count is immediate
-            inst.SetData(rotation);
-        }
-    }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0110'0000'0000'0000) {
         const auto cond = static_cast<ECondition>(getBits(8, 4));
 
@@ -787,6 +814,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
         {
             auto res = tryParseSimpleOpcodes();
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return inst; }
+        }
+        {
+            auto res = tryParseShiftOpcodes();
             if (!res) { return tl::unexpected(res.error()); }
             if (*res) { return inst; }
         }
