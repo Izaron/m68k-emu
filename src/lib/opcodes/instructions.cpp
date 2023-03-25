@@ -9,19 +9,6 @@ static_assert(std::is_trivially_constructible_v<TInstruction>);
 
 namespace {
 
-template<typename Type, typename Value>
-bool GetMostSignificantBit(Value value) {
-    if constexpr (std::is_same_v<Type, TByte>) {
-        return value & (1 << 7);
-    }
-    else if constexpr (std::is_same_v<Type, TWord>) {
-        return value & (1 << 15);
-    }
-    else if constexpr (std::is_same_v<Type, TLong>) {
-        return value & (1 << 31);
-    }
-}
-
 bool IsCarry(TLongLong value, TInstruction::ESize size) {
     switch (size) {
         case TInstruction::Byte: return value & (value ^ 0xFF);
@@ -187,7 +174,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             const TWord result = ((hval << 4) + lval) & 0xFF;
 
             SAFE_CALL(Dst_.WriteByte(ctx, result));
-            ctx.Registers.SetNegativeFlag(GetMostSignificantBit<TByte>(result));
+            ctx.Registers.SetNegativeFlag(GetMsb(result, Byte));
             ctx.Registers.SetCarryFlag(carry);
             ctx.Registers.SetExtendFlag(carry);
             ctx.Registers.SetOverflowFlag((~binaryResult & result & 0x80) != 0);
