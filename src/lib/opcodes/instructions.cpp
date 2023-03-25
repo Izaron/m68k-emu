@@ -626,7 +626,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
-    if (*word == 0b0100'1100'0111'0001) {
+    if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
     else if (*word == 0b0000'0010'0011'1100) {
