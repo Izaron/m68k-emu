@@ -20,6 +20,7 @@ public:
         AndiToCcrKind,  // ANDItoCCR
         AndiToSrKind,   // ANDItoSR
         AslKind,        // ASL
+        AsrKind,        // ASR
         NopKind,        // NOP
     };
 

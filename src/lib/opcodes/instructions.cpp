@@ -48,10 +48,6 @@ bool GetMsb(TLongLong value, TInstruction::ESize size) {
     return (value >> (BitCount(size) - 1)) & 1;
 }
 
-bool GetPastOneMsb(TLongLong value, TInstruction::ESize size) {
-    return (value >> BitCount(size)) & 1;
-}
-
 bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ESize size) {
     const bool lhsMsb = GetMsb(lhs, size);
     const bool rhsMsb = GetMsb(rhs, size);
@@ -223,7 +219,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SR &= *srcVal;
             break;
         }
-        case AslKind: {
+        case AslKind:
+        case AsrKind: {
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
 
             uint8_t rotation;
@@ -237,8 +234,20 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             TLongLong result = *dstVal;
             bool hasOverflow = false;
             bool curMsb = GetMsb(result, Size_);
+            bool lastBitShifted;
             for (int i = 0; i < rotation; ++i) {
-                result <<= 1;
+                if (Kind_ == AslKind) {
+                    lastBitShifted = GetMsb(result, Size_);
+                    result <<= 1;
+                } else {
+                    if (i >= BitCount(Size_)) {
+                        lastBitShifted = 0;
+                    } else {
+                        lastBitShifted = result & 1;
+                    }
+                    // preserve the most significant bit
+                    result = (result >> 1) | (result & (1LL << (BitCount(Size_) - 1)));
+                }
                 bool newMsb = GetMsb(result, Size_);
                 if (curMsb != newMsb) {
                     hasOverflow = true;
@@ -254,8 +263,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             if (rotation == 0) {
                 ctx.Registers.SetCarryFlag(0);
             } else {
-                ctx.Registers.SetExtendFlag(GetPastOneMsb(result, Size_)); // the last bit shifted out of the operand
-                ctx.Registers.SetCarryFlag(GetPastOneMsb(result, Size_));
+                ctx.Registers.SetExtendFlag(lastBitShifted);
+                ctx.Registers.SetCarryFlag(lastBitShifted);
             }
             break;
         }
@@ -485,19 +494,21 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
         inst.SetKind(AddKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
-    else if (applyMask(0b1111'1111'1100'0000) == 0b1110'0001'1100'0000) {
-        // ASL on any memory, shift by 1
+    else if (applyMask(0b1111'1110'1100'0000) == 0b1110'0000'1100'0000) {
+        // ASL/ASR on any memory, shift by 1
+        auto kind = getBit(8) ? AslKind : AsrKind;
         auto dst = parseTargetWithSize(Word);
         if (!dst) { return tl::unexpected(dst.error()); }
 
-        inst.SetKind(AslKind).SetDst(*dst).SetSize(Word).SetData(1);
+        inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
     }
-    else if (applyMask(0b1111'0001'0001'1000) == 0b1110'0001'0000'0000) {
-        // ASL on Dn
+    else if (applyMask(0b1111'0000'0001'1000) == 0b1110'0000'0000'0000) {
+        // ASL/ASR on Dn
+        auto kind = getBit(8) ? AslKind : AsrKind;
         uint8_t rotation = getBits(9, 3);
         auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
 
-        inst.SetKind(AslKind).SetDst(dst).SetSize(getSize0());
+        inst.SetKind(kind).SetDst(dst).SetSize(getSize0());
         if (getBit(5)) {
             // shift count is in the data register
             auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(rotation);
