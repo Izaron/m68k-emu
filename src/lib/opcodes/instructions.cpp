@@ -586,13 +586,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     if (*word == 0b0100'1100'0111'0001) {
         inst.SetKind(NopKind);
     }
-    if (*word == 0b0000'0010'0011'1100) {
+    else if (*word == 0b0000'0010'0011'1100) {
         auto& pc = ctx.Registers.PC;
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
         pc += 2;
         inst.SetKind(AndiToCcrKind).SetSrc(src);
     }
-    if (*word == 0b0000'0010'0111'1100) {
+    else if (*word == 0b0000'0010'0111'1100) {
         auto& pc = ctx.Registers.PC;
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc);
         pc += 2;

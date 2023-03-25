@@ -263,8 +263,8 @@ int main() {
         return lhs.size() < rhs.size();
     });
 
-    int from = 25;
-    int to = 25;
+    int from = 13;
+    int to = 13;
 
     int num = 0;
     for (const auto& path : paths) {
