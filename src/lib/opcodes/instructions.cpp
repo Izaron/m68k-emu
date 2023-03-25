@@ -40,13 +40,16 @@ bool IsZero(TLongLong value, TInstruction::ESize size) {
     }
 }
 
+uint8_t BitCount(TInstruction::ESize size) {
+    return size << 3;
+}
+
 bool GetMsb(TLongLong value, TInstruction::ESize size) {
-    switch (size) {
-        case TInstruction::Byte: return (value >> 7) & 1;
-        case TInstruction::Word: return (value >> 15) & 1;
-        case TInstruction::Long: return (value >> 31) & 1;
-        default: __builtin_unreachable();
-    }
+    return (value >> (BitCount(size) - 1)) & 1;
+}
+
+bool GetPastOneMsb(TLongLong value, TInstruction::ESize size) {
+    return (value >> BitCount(size)) & 1;
 }
 
 bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ESize size) {
@@ -220,6 +223,42 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SR &= *srcVal;
             break;
         }
+        case AslKind: {
+            SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
+
+            uint8_t rotation;
+            if (HasSrc_) {
+                SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
+                rotation = *srcVal % 64;
+            } else {
+                rotation = Data_ ? Data_ : 8;
+            }
+
+            TLongLong result = *dstVal;
+            bool hasOverflow = false;
+            bool curMsb = GetMsb(result, Size_);
+            for (int i = 0; i < rotation; ++i) {
+                result <<= 1;
+                bool newMsb = GetMsb(result, Size_);
+                if (curMsb != newMsb) {
+                    hasOverflow = true;
+                }
+                curMsb = newMsb;
+            }
+
+            SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
+
+            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
+            ctx.Registers.SetZeroFlag(IsZero(result, Size_));
+            ctx.Registers.SetOverflowFlag(hasOverflow);
+            if (rotation == 0) {
+                ctx.Registers.SetCarryFlag(0);
+            } else {
+                ctx.Registers.SetExtendFlag(GetPastOneMsb(result, Size_)); // the last bit shifted out of the operand
+                ctx.Registers.SetCarryFlag(GetPastOneMsb(result, Size_));
+            }
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -265,8 +304,8 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     const auto getBits = [&word](std::size_t begin, std::size_t len) { return (*word >> begin) & ((1 << len) - 1); };
     const auto getBit = [&getBits](std::size_t bit) { return getBits(bit, 1); };
 
+    // 00 -> byte, 01 -> word, 02 -> long
     const auto getSize0 = [&getBits]() {
-        // 00 -> byte, 01 -> word, 02 -> long
         switch (getBits(6, 2)) {
             case 0: return Byte;
             case 1: return Word;
@@ -445,6 +484,28 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
 
         inst.SetKind(AddKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
+    }
+    else if (applyMask(0b1111'1111'1100'0000) == 0b1110'0001'1100'0000) {
+        // ASL on any memory, shift by 1
+        auto dst = parseTargetWithSize(Word);
+        if (!dst) { return tl::unexpected(dst.error()); }
+
+        inst.SetKind(AslKind).SetDst(*dst).SetSize(Word).SetData(1);
+    }
+    else if (applyMask(0b1111'0001'0001'1000) == 0b1110'0001'0000'0000) {
+        // ASL on Dn
+        uint8_t rotation = getBits(9, 3);
+        auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
+
+        inst.SetKind(AslKind).SetDst(dst).SetSize(getSize0());
+        if (getBit(5)) {
+            // shift count is in the data register
+            auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(rotation);
+            inst.SetSrc(src);
+        } else {
+            // shift count is immediate
+            inst.SetData(rotation);
+        }
     }
     else {
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);

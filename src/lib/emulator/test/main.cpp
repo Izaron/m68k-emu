@@ -254,8 +254,8 @@ int main() {
         paths.emplace(std::move(path));
     }
 
-    int from = 1;
-    int to = 14;
+    int from = 15;
+    int to = 17;
 
     int num = 0;
     for (const auto& path : paths) {
@@ -263,7 +263,7 @@ int main() {
         if (num < from || num > to) continue;
         auto file = LoadTestFile(path);
         if (!WorkOnFile(file)) {
-            break;
+            //break;
         }
     }
 }
