@@ -403,6 +403,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         }
         case ClrKind:
         case NegKind:
+        case NegxKind:
         case NotKind: {
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
             auto result = *dstVal;
@@ -413,22 +414,27 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 result = 0;
             } else if (Kind_ == NotKind) {
                 result = ~result;
-            } else if (Kind_ == NegKind) {
+            } else if (Kind_ == NegKind || Kind_ == NegxKind) {
                 result = ~result;
 
-                const auto mask0 = (1LL << (BitCount(Size_) - 1)) - 1;
-                const auto mask1 = (1LL << BitCount(Size_)) - 1;
-                if ((result & mask1) == mask0) {
-                    hasOverflow = true;
+                if (Kind_ != NegxKind || !ctx.Registers.GetExtendFlag()) {
+                    const auto mask0 = (1LL << (BitCount(Size_) - 1)) - 1;
+                    const auto mask1 = (1LL << BitCount(Size_)) - 1;
+                    if ((result & mask1) == mask0) {
+                        hasOverflow = true;
+                    }
+                    ++result;
                 }
-                ++result;
             }
 
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
-            ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            if (Kind_ == NegKind) {
+            const bool isZero = IsZero(result, Size_);
+            if (Kind_ != NegxKind || !isZero) {
+                ctx.Registers.SetZeroFlag(isZero);
+            }
+            if (Kind_ == NegKind || Kind_ == NegxKind) {
                 ctx.Registers.SetOverflowFlag(hasOverflow);
                 ctx.Registers.SetCarryFlag(IsCarry(result, Size_));
                 ctx.Registers.SetExtendFlag(ctx.Registers.GetCarryFlag());
@@ -632,10 +638,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
     const auto tryParseSimpleOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord>;
-        constexpr std::array<TCase, 3> cases{
-            std::make_tuple(ClrKind, 0b0100'0010'0000'0000),
-            std::make_tuple(NegKind, 0b0100'0100'0000'0000),
-            std::make_tuple(NotKind, 0b0100'0110'0000'0000),
+        constexpr std::array<TCase, 4> cases{
+            std::make_tuple(NegxKind, 0b0100'0000'0000'0000),
+            std::make_tuple(ClrKind,  0b0100'0010'0000'0000),
+            std::make_tuple(NegKind,  0b0100'0100'0000'0000),
+            std::make_tuple(NotKind,  0b0100'0110'0000'0000),
         };
         for (auto [kind, mask] : cases) {
             auto res = tryParseSimpleOpcode(kind, mask);

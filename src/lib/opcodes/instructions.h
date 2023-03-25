@@ -29,6 +29,7 @@ public:
         BtstKind,       // BTST
         ClrKind,        // CLR
         NegKind,        // NEG
+        NegxKind,       // NEGX
         NopKind,        // NOP
         NotKind,        // NOT
     };
