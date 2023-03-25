@@ -340,7 +340,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         }
         case BchgKind:
         case BclrKind:
-        case BsetKind: {
+        case BsetKind:
+        case BtstKind: {
             // read bit number
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
             auto bitNum = *srcVal;
@@ -372,10 +373,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
             // update Z flag and write value
             ctx.Registers.SetZeroFlag(not (val & mask));
-            if (Dst_.GetKind() == TTarget::DataRegisterKind) {
-                SAFE_CALL(Dst_.WriteLong(ctx, newVal));
-            } else {
-                SAFE_CALL(Dst_.WriteByte(ctx, newVal));
+            if (newVal != val) {
+                if (Dst_.GetKind() == TTarget::DataRegisterKind) {
+                    SAFE_CALL(Dst_.WriteLong(ctx, newVal));
+                } else {
+                    SAFE_CALL(Dst_.WriteByte(ctx, newVal));
+                }
             }
 
             break;
@@ -548,7 +551,8 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
     const auto tryParseBitOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord, TWord>;
-        constexpr std::array<TCase, 3> cases{
+        constexpr std::array<TCase, 4> cases{
+            std::make_tuple(BtstKind, 0b0000'0001'0000'0000, 0b0000'1000'0000'0000),
             std::make_tuple(BchgKind, 0b0000'0001'0100'0000, 0b0000'1000'0100'0000),
             std::make_tuple(BclrKind, 0b0000'0001'1000'0000, 0b0000'1000'1000'0000),
             std::make_tuple(BsetKind, 0b0000'0001'1100'0000, 0b0000'1000'1100'0000),
