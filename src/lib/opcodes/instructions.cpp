@@ -282,7 +282,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case AslKind:
-        case AsrKind: {
+        case AsrKind:
+        case LslKind:
+        case LsrKind: {
+            const bool isArithmetic = Kind_ == AslKind || Kind_ == AsrKind;
+            const bool isLeft = Kind_ == AslKind || Kind_ == LslKind;
+
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
 
             uint8_t rotation;
@@ -298,7 +303,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             bool curMsb = GetMsb(result, Size_);
             bool lastBitShifted;
             for (int i = 0; i < rotation; ++i) {
-                if (Kind_ == AslKind) {
+                if (isLeft) {
                     lastBitShifted = GetMsb(result, Size_);
                     result <<= 1;
                 } else {
@@ -321,7 +326,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            ctx.Registers.SetOverflowFlag(hasOverflow);
+            if (isArithmetic) {
+                ctx.Registers.SetOverflowFlag(hasOverflow);
+            } else {
+                ctx.Registers.SetOverflowFlag(0);
+            }
             if (rotation == 0) {
                 ctx.Registers.SetCarryFlag(0);
             } else {
@@ -670,7 +679,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
             return true;
         }
-        if (applyMask(0b1111'0000'0000'0000) == 0b1110'0000'0000'0000 && getBits(3, 2) == index) {
+        if (applyMask(0b1111'0000'0000'0000) == 0b1110'0000'0000'0000 && getBits(3, 2) == index && getBits(6, 2) != 3) {
             // operation on Dn
             auto kind = getBit(8) ? leftKind : rightKind;
             uint8_t rotation = getBits(9, 3);
@@ -692,8 +701,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
     const auto tryParseShiftOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, EKind, int>;
-        constexpr std::array<TCase, 1> cases{
+        constexpr std::array<TCase, 2> cases{
             std::make_tuple(AslKind, AsrKind, 0),
+            std::make_tuple(LslKind, LsrKind, 1),
         };
         for (auto [leftKind, rightKind, index] : cases) {
             auto res = tryParseShiftOpcode(leftKind, rightKind, index);
