@@ -18,6 +18,10 @@ public:
     tl::expected<TByte, TError> ReadByte(TAddressType addr);
     tl::expected<TWord, TError> ReadWord(TAddressType addr);
     tl::expected<TLong, TError> ReadLong(TAddressType addr);
+
+    [[nodiscard]] std::optional<TError> WriteByte(TAddressType addr, TByte b);
+    [[nodiscard]] std::optional<TError> WriteWord(TAddressType addr, TWord w);
+    [[nodiscard]] std::optional<TError> WriteLong(TAddressType addr, TLong l);
 };
 
 } // namespace NMemory

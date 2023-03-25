@@ -20,6 +20,10 @@ bool GetFlag(TWord r, int index) {
 
 } // namespace
 
+TLong& TRegisters::GetStackPointer() {
+    return GetSupervisorFlag() ? SSP : USP;
+}
+
 void TRegisters::SetSupervisorFlag(bool flag) { return SetFlag(flag, SR, 13); }
 bool TRegisters::GetSupervisorFlag() const { return GetFlag(SR, 13); }
 

@@ -140,6 +140,22 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
     const auto name = init;                         \
     if (!name) { return name.error(); }
 
+    const auto displaceProgramCounter = [&]() {
+        auto& pc = ctx.Registers.PC;
+        if (Size_ == Byte) {
+            TSignedByte offset = Data_;
+            pc += offset;
+        } else {
+            TSignedWord offset = Data_;
+            pc += offset;
+
+            // ignore the parsed word
+            if (offset < 0) {
+                pc -= 2;
+            }
+        }
+    };
+
     switch (Kind_) {
         case AbcdKind: {
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
@@ -316,25 +332,27 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         }
         case BccKind: {
             if (CalculateCondition(ctx.Registers, Cond_)) {
-                auto& pc = ctx.Registers.PC;
+                displaceProgramCounter();
 
-                if (Size_ == Byte) {
-                    TSignedByte offset = Data_;
-                    pc += offset;
-                } else {
-                    // it it word
-                    TSignedWord offset = Data_;
-                    pc += offset;
-
-                    // ignore the parsed word
-                    if (offset < 0) {
-                        pc -= 2;
-                    }
+                if (ctx.Registers.PC & 1) {
+                    return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
                 }
+            }
+            break;
+        }
+        case BsrKind: {
+            // reserve memory on the stack
+            auto& sp = ctx.Registers.GetStackPointer();
+            sp -= 4;
 
-                if (pc & 1) {
-                    return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", pc};
-                }
+            // dump the current program counter
+            SAFE_CALL(ctx.Memory.WriteLong(sp, ctx.Registers.PC));
+
+            // change the program counter
+            displaceProgramCounter();
+
+            if (ctx.Registers.PC & 1) {
+                return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
             }
             break;
         }
@@ -685,7 +703,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             size = Word;
         }
 
-        inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
+        // the False condition is actually a BSR (Branch to Subroutine)
+        if (cond == FalseCond) {
+            inst.SetKind(BsrKind).SetData(displacement).SetSize(size);
+        } else {
+            inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
+        }
     }
     else if (!tryParseBitOpcodes()) {
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);

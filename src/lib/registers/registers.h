@@ -40,6 +40,11 @@ struct TRegisters {
     TWord SR;
 
     /**
+     * The stack pointer register depend on the supervisor flag
+     */
+    TLong& GetStackPointer();
+
+    /**
      * Status register helpers
      */
     void SetSupervisorFlag(bool flag);

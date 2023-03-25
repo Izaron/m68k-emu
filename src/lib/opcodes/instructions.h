@@ -25,6 +25,7 @@ public:
         BchgKind,       // BCHG
         BclrKind,       // BCLR
         BsetKind,       // BSET
+        BsrKind,        // BSR
         BtstKind,       // BTST
         NopKind,        // NOP
     };

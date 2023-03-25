@@ -24,4 +24,30 @@ tl::expected<TLong, TError> IDevice::ReadLong(TAddressType addr) {
     });
 }
 
+std::optional<TError> IDevice::WriteByte(TAddressType addr, TByte b) {
+    TDataHolder data;
+    data.emplace_back(b);
+    return Write(addr, data);
+}
+
+std::optional<TError> IDevice::WriteWord(TAddressType addr, TWord w) {
+    TDataHolder data;
+    for (int i = 0; i < 2; ++i) {
+        data.emplace_back(w & 0xFF);
+        w >>= 8;
+    }
+    std::reverse(data.begin(), data.end());
+    return Write(addr, data);
+}
+
+std::optional<TError> IDevice::WriteLong(TAddressType addr, TLong l) {
+    TDataHolder data;
+    for (int i = 0; i < 4; ++i) {
+        data.emplace_back(l & 0xFF);
+        l >>= 8;
+    }
+    std::reverse(data.begin(), data.end());
+    return Write(addr, data);
+}
+
 } // namespace NMemory
