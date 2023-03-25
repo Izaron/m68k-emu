@@ -685,6 +685,30 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
+    /*
+     * Immediate operations: ADDI, ANDI
+     */
+    const auto tryParseImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
+        using TCase = std::tuple<EKind, int>;
+        constexpr std::array<TCase, 2> cases{
+            std::make_tuple(AndiKind, 1),
+            std::make_tuple(AddiKind, 3),
+        };
+
+        for (auto [kind, index] : cases) {
+            if (applyMask(0b1111'0001'0000'0000) == 0b0000'0000'0000'0000 && getBits(9, 3) == index) {
+                auto& pc = ctx.Registers.PC;
+                auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
+                pc += (getSize0() == Long) ? 4 : 2;
+
+                PARSE_TARGET_SAFE;
+                inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
+                return true;
+            }
+        }
+        return false;
+    };
+
     if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -699,22 +723,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc);
         pc += 2;
         inst.SetKind(AndiToSrKind).SetSrc(src);
-    }
-    else if (applyMask(0b1111'1111'0000'0000) == 0b0000'0110'0000'0000) {
-        auto& pc = ctx.Registers.PC;
-        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
-        pc += (getSize0() == Long) ? 4 : 2;
-
-        PARSE_TARGET_SAFE;
-        inst.SetKind(AddiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
-    }
-    else if (applyMask(0b1111'1111'0000'0000) == 0b0000'0010'0000'0000) {
-        auto& pc = ctx.Registers.PC;
-        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress((getSize0() == Byte) ? (pc + 1) : pc);
-        pc += (getSize0() == Long) ? 4 : 2;
-
-        PARSE_TARGET_SAFE;
-        inst.SetKind(AndiKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
         PARSE_TARGET_SAFE;
@@ -792,6 +800,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         TRY_PARSE(tryParseBitOpcodes);
         TRY_PARSE(tryParseSimpleOpcodes);
         TRY_PARSE(tryParseShiftOpcodes);
+        TRY_PARSE(tryParseImmediateOpcodes);
 
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
     }
