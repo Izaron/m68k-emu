@@ -339,7 +339,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case BchgKind:
-        case BclrKind: {
+        case BclrKind:
+        case BsetKind: {
             // read bit number
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
             auto bitNum = *srcVal;
@@ -365,6 +366,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 newVal ^= mask;
             } else if (Kind_ == BclrKind) {
                 newVal &= newVal ^ mask;
+            } else if (Kind_ == BsetKind) {
+                newVal |= mask;
             }
 
             // update Z flag and write value
@@ -544,13 +547,14 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     const auto tryParseBitOpcodes = [&]() -> tl::expected<bool, TError> {
-        {
-            auto res = tryParseBitOpcode(BchgKind, 0b0000'0001'0100'0000, 0b0000'1000'0100'0000);
-            if (!res) { return tl::unexpected(res.error()); }
-            if (*res) { return true; }
-        }
-        {
-            auto res = tryParseBitOpcode(BclrKind, 0b0000'0001'1000'0000, 0b0000'1000'1000'0000);
+        using TCase = std::tuple<EKind, TWord, TWord>;
+        constexpr std::array<TCase, 3> cases{
+            std::make_tuple(BchgKind, 0b0000'0001'0100'0000, 0b0000'1000'0100'0000),
+            std::make_tuple(BclrKind, 0b0000'0001'1000'0000, 0b0000'1000'1000'0000),
+            std::make_tuple(BsetKind, 0b0000'0001'1100'0000, 0b0000'1000'1100'0000),
+        };
+        for (auto [kind, registerMask, immediateMask] : cases) {
+            auto res = tryParseBitOpcode(kind, registerMask, immediateMask);
             if (!res) { return tl::unexpected(res.error()); }
             if (*res) { return true; }
         }
