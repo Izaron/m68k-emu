@@ -401,6 +401,22 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
             break;
         }
+        case ClrKind: {
+            SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
+            auto result = *dstVal;
+
+            if (Kind_ == ClrKind) {
+                result = 0;
+            }
+
+            SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
+
+            ctx.Registers.SetNegativeFlag(0);
+            ctx.Registers.SetZeroFlag(1);
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -583,6 +599,29 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
+    const auto tryParseSimpleOpcode = [&](EKind kind, TWord mask) -> tl::expected<bool, TError> {
+        if (applyMask(0b1111'1111'0000'0000) == mask) {
+            auto dst = parseTarget();
+            if (!dst) { return tl::unexpected(dst.error()); }
+            inst.SetKind(kind).SetDst(*dst).SetSize(getSize0());
+            return true;
+        }
+        return false;
+    };
+
+    const auto tryParseSimpleOpcodes = [&]() -> tl::expected<bool, TError> {
+        using TCase = std::tuple<EKind, TWord>;
+        constexpr std::array<TCase, 1> cases{
+            std::make_tuple(ClrKind, 0b0100'0010'0000'0000),
+        };
+        for (auto [kind, mask] : cases) {
+            auto res = tryParseSimpleOpcode(kind, mask);
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return true; }
+        }
+        return false;
+    };
+
     if (*word == 0b0100'1100'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -710,7 +749,17 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
         }
     }
-    else if (!tryParseBitOpcodes()) {
+    else {
+        {
+            auto res = tryParseBitOpcodes();
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return inst; }
+        }
+        {
+            auto res = tryParseSimpleOpcodes();
+            if (!res) { return tl::unexpected(res.error()); }
+            if (*res) { return inst; }
+        }
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
     }
 

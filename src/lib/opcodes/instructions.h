@@ -27,6 +27,7 @@ public:
         BsetKind,       // BSET
         BsrKind,        // BSR
         BtstKind,       // BTST
+        ClrKind,        // CLR
         NopKind,        // NOP
     };
 
