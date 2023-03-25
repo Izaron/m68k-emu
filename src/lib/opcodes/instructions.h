@@ -22,6 +22,7 @@ public:
         AslKind,        // ASL
         AsrKind,        // ASR
         BccKind,        // Bcc
+        BchgKind,       // BCHG
         NopKind,        // NOP
     };
 

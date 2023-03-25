@@ -338,6 +338,39 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
+        case BchgKind: {
+            // read bit number
+            SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
+            auto bitNum = *srcVal;
+            if (Dst_.GetKind() == TTarget::DataRegisterKind) {
+                bitNum %= 32;
+            } else {
+                bitNum %= 8;
+            }
+
+            // read destination value
+            TLongLong val;
+            if (Dst_.GetKind() == TTarget::DataRegisterKind) {
+                SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
+                val = *dstVal;
+            } else {
+                SAFE_DECLARE(dstVal, Dst_.ReadByte(ctx));
+                val = *dstVal;
+            }
+
+            const auto mask = 1LL << bitNum;
+            const auto newVal = val ^ mask;
+
+            // update Z flag and write value
+            ctx.Registers.SetZeroFlag(not (val & mask));
+            if (Dst_.GetKind() == TTarget::DataRegisterKind) {
+                SAFE_CALL(Dst_.WriteLong(ctx, newVal));
+            } else {
+                SAFE_CALL(Dst_.WriteByte(ctx, newVal));
+            }
+
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -600,6 +633,26 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
 
         inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
+    }
+    else if (applyMask(0b1111'0001'1100'0000) == 0b0000'0001'0100'0000) {
+        auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+
+        auto dst = parseTarget();
+        if (!dst) { return tl::unexpected(dst.error()); }
+        dst->SetSize(Byte);
+
+        inst.SetKind(BchgKind).SetSrc(src).SetDst(*dst).SetSize(Byte);
+    }
+    else if (applyMask(0b1111'1111'1100'0000) == 0b0000'1000'0100'0000) {
+        auto& pc = ctx.Registers.PC;
+        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
+        pc += 2;
+
+        auto dst = parseTarget();
+        if (!dst) { return tl::unexpected(dst.error()); }
+        dst->SetSize(Byte);
+
+        inst.SetKind(BchgKind).SetSrc(src).SetDst(*dst).SetSize(Byte);
     }
     else {
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
