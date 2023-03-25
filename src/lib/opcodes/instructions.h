@@ -21,6 +21,7 @@ public:
         AndiToSrKind,   // ANDItoSR
         AslKind,        // ASL
         AsrKind,        // ASR
+        BccKind,        // Bcc
         NopKind,        // NOP
     };
 
@@ -30,10 +31,30 @@ public:
         Long = 4,
     };
 
+    enum ECondition : uint8_t {
+        TrueCond,               // T
+        FalseCond,              // F
+        HigherCond,             // HI
+        LowerOrSameCond,        // LS
+        CarryClearCond,         // CC
+        CarrySetCond,           // CS
+        NotEqualCond,           // NE
+        EqualCond,              // EQ
+        OverflowClearCond,      // VC
+        OverflowSetCond,        // VS
+        PlusCond,               // PL
+        MinusCond,              // MI
+        GreaterOrEqualCond,     // GE
+        LessThanCond,           // LT
+        GreaterThanCond,        // GT
+        LessOrEqualCond,        // LE
+    };
+
     TInstruction& SetKind(EKind kind);
+    TInstruction& SetSize(ESize size);
+    TInstruction& SetCondition(ECondition cond);
     TInstruction& SetSrc(TTarget target);
     TInstruction& SetDst(TTarget target);
-    TInstruction& SetSize(ESize size);
     TInstruction& SetData(TWord data);
 
     [[nodiscard]] std::optional<TError> Execute(NEmulator::TContext ctx);
@@ -42,9 +63,10 @@ public:
 
 private:
     EKind Kind_;
+    ESize Size_;
+    ECondition Cond_;
     TTarget Src_;
     TTarget Dst_;
-    ESize Size_;
     TWord Data_;
 
     bool HasSrc_;

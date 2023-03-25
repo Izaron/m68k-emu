@@ -245,17 +245,24 @@ bool WorkOnFile(const json& file) {
 int main() {
     namespace fs = std::filesystem;
 
-    std::set<std::string> paths;
+    std::vector<std::string> paths;
     for (const auto& entry : fs::directory_iterator("/home/mango/ProcessorTests/680x0/68000/v1")) {
         auto path = entry.path().string();
         if (!path.ends_with(".json")) {
             continue;
         }
-        paths.emplace(std::move(path));
+        paths.emplace_back(std::move(path));
     }
+    std::sort(paths.begin(), paths.end(), [](auto&& lhs, auto&& rhs) {
+        for (std::size_t i = 0; i < std::min(lhs.size(), rhs.size()); ++i) {
+            if (std::tolower(lhs[i]) < std::tolower(rhs[i])) return true;
+            if (std::tolower(lhs[i]) > std::tolower(rhs[i])) return false;
+        }
+        return lhs.size() < rhs.size();
+    });
 
-    int from = 15;
-    int to = 20;
+    int from = 21;
+    int to = 21;
 
     int num = 0;
     for (const auto& path : paths) {

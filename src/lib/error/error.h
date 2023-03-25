@@ -9,6 +9,7 @@ public:
         UnknownOpcode,
         UnknownAddressingMode,
         UnalignedMemoryAccess,
+        UnalignedProgramCounter,
     };
 
     TError() = default;

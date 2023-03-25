@@ -55,11 +55,62 @@ bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ES
     return (lhsMsb && rhsMsb && !resultMsb) || (!lhsMsb && !rhsMsb && resultMsb);
 }
 
+bool CalculateCondition(const NRegisters::TRegisters& regs, TInstruction::ECondition cond) {
+    switch (cond) {
+        case TInstruction::TrueCond:
+            return true;
+        case TInstruction::FalseCond:
+            return false;
+        case TInstruction::HigherCond:
+            return (not regs.GetCarryFlag()) && (not regs.GetZeroFlag());
+        case TInstruction::LowerOrSameCond:
+            return regs.GetCarryFlag() || regs.GetZeroFlag();
+        case TInstruction::CarryClearCond:
+            return not regs.GetCarryFlag();
+        case TInstruction::CarrySetCond:
+            return     regs.GetCarryFlag();
+        case TInstruction::NotEqualCond:
+            return not regs.GetZeroFlag();
+        case TInstruction::EqualCond:
+            return     regs.GetZeroFlag();
+        case TInstruction::OverflowClearCond:
+            return not regs.GetOverflowFlag();
+        case TInstruction::OverflowSetCond:
+            return     regs.GetOverflowFlag();
+        case TInstruction::PlusCond:
+            return not regs.GetNegativeFlag();
+        case TInstruction::MinusCond:
+            return     regs.GetNegativeFlag();
+        case TInstruction::GreaterOrEqualCond:
+            return not (regs.GetNegativeFlag() xor regs.GetOverflowFlag());
+        case TInstruction::LessThanCond:
+            return      regs.GetNegativeFlag() xor regs.GetOverflowFlag();
+        case TInstruction::GreaterThanCond:
+            return (regs.GetNegativeFlag() and regs.GetOverflowFlag() and (not regs.GetZeroFlag())) or
+                   ((not regs.GetNegativeFlag()) and (not regs.GetOverflowFlag()) and (not regs.GetZeroFlag()));
+        case TInstruction::LessOrEqualCond:
+            return regs.GetZeroFlag() or (regs.GetNegativeFlag() and (not regs.GetOverflowFlag())) or
+                   ((not regs.GetNegativeFlag()) and regs.GetOverflowFlag());
+        default:
+            __builtin_unreachable();
+    }
+}
+
 } // namespace
 
 TInstruction& TInstruction::SetKind(EKind kind) {
     Kind_ = kind;
     HasSrc_ = HasDst_ = false;
+    return *this;
+}
+
+TInstruction& TInstruction::SetSize(ESize size) {
+    Size_ = size;
+    return *this;
+}
+
+TInstruction& TInstruction::SetCondition(ECondition cond) {
+    Cond_ = cond;
     return *this;
 }
 
@@ -72,11 +123,6 @@ TInstruction& TInstruction::SetSrc(TTarget target) {
 TInstruction& TInstruction::SetDst(TTarget target) {
     Dst_ = target;
     HasDst_ = true;
-    return *this;
-}
-
-TInstruction& TInstruction::SetSize(ESize size) {
-    Size_ = size;
     return *this;
 }
 
@@ -265,6 +311,30 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             } else {
                 ctx.Registers.SetExtendFlag(lastBitShifted);
                 ctx.Registers.SetCarryFlag(lastBitShifted);
+            }
+            break;
+        }
+        case BccKind: {
+            if (CalculateCondition(ctx.Registers, Cond_)) {
+                auto& pc = ctx.Registers.PC;
+
+                if (Size_ == Byte) {
+                    TSignedByte offset = Data_;
+                    pc += offset;
+                } else {
+                    // it it word
+                    TSignedWord offset = Data_;
+                    pc += offset;
+
+                    // ignore the parsed word
+                    if (offset < 0) {
+                        pc -= 2;
+                    }
+                }
+
+                if (pc & 1) {
+                    return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", pc};
+                }
             }
             break;
         }
@@ -517,6 +587,19 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             // shift count is immediate
             inst.SetData(rotation);
         }
+    }
+    else if (applyMask(0b1111'0000'0000'0000) == 0b0110'0000'0000'0000) {
+        const auto cond = static_cast<ECondition>(getBits(8, 4));
+
+        auto displacement = getBits(0, 8);
+        auto size = Byte;
+        if (displacement == 0) {
+            READ_WORD_SAFE;
+            displacement = *word;
+            size = Word;
+        }
+
+        inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
     }
     else {
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
