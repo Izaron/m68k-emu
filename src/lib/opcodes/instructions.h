@@ -29,6 +29,7 @@ public:
         BtstKind,       // BTST
         ClrKind,        // CLR
         NopKind,        // NOP
+        NotKind,        // NOT
     };
 
     enum ESize : uint8_t {

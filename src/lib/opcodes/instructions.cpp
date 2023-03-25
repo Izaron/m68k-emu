@@ -401,18 +401,21 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
             break;
         }
-        case ClrKind: {
+        case ClrKind:
+        case NotKind: {
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
             auto result = *dstVal;
 
             if (Kind_ == ClrKind) {
                 result = 0;
+            } else if (Kind_ == NotKind) {
+                result = ~result;
             }
 
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
-            ctx.Registers.SetNegativeFlag(0);
-            ctx.Registers.SetZeroFlag(1);
+            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
+            ctx.Registers.SetZeroFlag(IsZero(result, Size_));
             ctx.Registers.SetOverflowFlag(0);
             ctx.Registers.SetCarryFlag(0);
             break;
@@ -611,8 +614,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
 
     const auto tryParseSimpleOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord>;
-        constexpr std::array<TCase, 1> cases{
+        constexpr std::array<TCase, 2> cases{
             std::make_tuple(ClrKind, 0b0100'0010'0000'0000),
+            std::make_tuple(NotKind, 0b0100'0110'0000'0000),
         };
         for (auto [kind, mask] : cases) {
             auto res = tryParseSimpleOpcode(kind, mask);
