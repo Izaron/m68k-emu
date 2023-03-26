@@ -29,7 +29,8 @@ public:
         BtstKind,       // BTST
         ClrKind,        // CLR
         CmpKind,        // CMP
-        CmpiKind,       // CMPA
+        CmpaKind,       // CMPA
+        CmpiKind,       // CMPI
         CmpmKind,       // CMPM
         EorKind,        // EOR
         EoriKind,       // EORI

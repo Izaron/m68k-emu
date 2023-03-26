@@ -780,9 +780,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Immediate operations: ADDI, ANDI, EORI, ORI
+     * Binary operations on immediate: ADDI, ANDI, EORI, ORI
      */
-    const auto tryParseImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
+    const auto tryParseBinaryOnImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
         constexpr std::array<TCase, 6> cases{
             std::make_tuple(OriKind, 0),
@@ -838,6 +838,29 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
+    /*
+     * Binary operations on address: ADDA, SUBA
+     */
+    const auto tryParseBinaryOnAddressOpcodes = [&]() -> tl::expected<bool, TError> {
+        using TCase = std::tuple<EKind, int>;
+        constexpr std::array<TCase, 2> cases{
+            std::make_tuple(SubaKind, 0),
+            std::make_tuple(AddaKind, 2),
+        };
+
+        for (auto [kind, index] : cases) {
+            if (applyMask(0b1001'0000'1100'0000) == 0b1001'0000'1100'0000 && getBits(13, 2) == index) {
+                const auto size = getBit(8) ? Long : Word;
+                auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
+                PARSE_TARGET_WITH_SIZE_SAFE(size);
+                std::swap(src, *dst);
+                inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(size);
+                return true;
+            }
+        }
+        return false;
+    };
+
     if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -851,14 +874,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
         inst.SetKind(AbcdKind).SetSrc(src).SetDst(dst);
     }
-    else if (applyMask(0b1011'0000'1100'0000) == 0b1001'0000'1100'0000) {
-        const auto size = getBit(8) ? Long : Word;
-        auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
-        PARSE_TARGET_WITH_SIZE_SAFE(size);
-        std::swap(src, *dst);
-        inst.SetKind(getBit(14) ? AddaKind : SubaKind).SetSrc(src).SetDst(*dst).SetSize(size);
-    }
-    else if (applyMask(0b1011'0001'0011'0000) == 0b1001'0001'0000'0000) {
+    else if (applyMask(0b1011'0001'0011'0000) == 0b1001'0001'0000'0000 && getBits(6, 2) != 3) {
         const auto size = getSize0();
         const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
         auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
@@ -902,7 +918,8 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         TRY_PARSE_SAFE(tryParseBitOpcodes);
         TRY_PARSE_SAFE(tryParseUnaryOpcodes);
         TRY_PARSE_SAFE(tryParseShiftOpcodes);
-        TRY_PARSE_SAFE(tryParseImmediateOpcodes);
+        TRY_PARSE_SAFE(tryParseBinaryOnAddressOpcodes);
+        TRY_PARSE_SAFE(tryParseBinaryOnImmediateOpcodes);
         TRY_PARSE_SAFE(tryParseBinaryOpcodes);
 
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
