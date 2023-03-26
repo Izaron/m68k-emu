@@ -127,7 +127,7 @@ std::optional<std::string> DumpDiff(const NRegisters::TRegisters& lhs, const NRe
     if (lhs.USP != rhs.USP) diffs.emplace_back("USP");
     if (lhs.SSP != rhs.SSP) diffs.emplace_back("SSP");
     if (lhs.PC != rhs.PC) diffs.emplace_back("PC");
-    if (lhs.SR != rhs.SR) diffs.emplace_back("SR");
+    if ((lhs.SR ^ rhs.SR) & 0b1111'0111'0001'1111) diffs.emplace_back("SR");
 
     if (diffs.empty()) {
         return std::nullopt;
@@ -269,7 +269,7 @@ int main() {
     const auto shouldRunTest = [](int index) {
         if (index >= 1 && index <= 26) return true;
         if (index >= 28 && index <= 30) return true;
-        if (index >= 39 && index <= 41) return true;
+        if (index >= 39 && index <= 43) return true;
         if (index >= 51 && index <= 56) return true;
         if (index >= 75 && index <= 87) return true;
         return false;

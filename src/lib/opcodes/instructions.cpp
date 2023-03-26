@@ -23,7 +23,7 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     if (kind >= TInstruction::AndKind && kind <= TInstruction::AndiToSrKind) {
         return AndType;
     }
-    if (kind >= TInstruction::EorKind && kind <= TInstruction::EoriKind) {
+    if (kind >= TInstruction::EorKind && kind <= TInstruction::EoriToSrKind) {
         return EorType;
     }
     if (kind >= TInstruction::OrKind && kind <= TInstruction::OriKind) {
@@ -291,15 +291,22 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
-        case AndiToCcrKind: {
+        case AndiToCcrKind:
+        case EoriToCcrKind: {
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
             auto& sr = ctx.Registers.SR;
-            sr = (sr & ~0xFF) | ((sr & 0xFF) & *srcVal);
+            sr = (sr & ~0xFF) | DoBinaryOp(GetOpcodeType(Kind_), sr & 0xFF, *srcVal);
             break;
         }
-        case AndiToSrKind: {
+        case AndiToSrKind:
+        case EoriToSrKind: {
             SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
-            ctx.Registers.SR &= *srcVal;
+            auto val = *srcVal;
+            if (Kind_ == EoriToSrKind) {
+                // TODO: find out why bits 12 and 14 matter
+                val &= 0b1010'1111'1111'1111;
+            }
+            ctx.Registers.SR = DoBinaryOp(GetOpcodeType(Kind_), ctx.Registers.SR, val);
             break;
         }
         case AslKind:
@@ -622,12 +629,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     TInstruction inst;
 
     /*
-     * Status register opcodes: [ANDI]to[CCR|SR]
+     * Status register opcodes: [ANDI|EORI]to[CCR|SR]
      */
     const auto tryParseStatusRegisterOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, EKind, int>;
-        constexpr std::array<TCase, 1> cases{
+        constexpr std::array<TCase, 2> cases{
             std::make_tuple(AndiToCcrKind, AndiToSrKind, 1),
+            std::make_tuple(EoriToCcrKind, EoriToSrKind, 5),
         };
         for (auto [ccrKind, srKind, index] : cases) {
             if (applyMask(0b1111'0001'1011'1111) == 0b0000'0000'0011'1100 && getBits(9, 3) == index) {

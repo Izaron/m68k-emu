@@ -30,6 +30,8 @@ public:
         ClrKind,        // CLR
         EorKind,        // EOR
         EoriKind,       // EORI
+        EoriToCcrKind,  // EORItoCCR
+        EoriToSrKind,   // EORItoSR
         LslKind,        // LSL
         LsrKind,        // LSR
         NegKind,        // NEG
