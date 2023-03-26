@@ -2,12 +2,15 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <thread>
 
 #include <lib/emulator/emulator.h>
 
 #include <thirdparty/include/nlohmann/json.hpp>
 
 using json = nlohmann::json;
+
+thread_local std::ofstream ferr;
 
 namespace {
 
@@ -32,7 +35,7 @@ public:
     }
 
     tl::expected<TDataHolder, TError> Read(TAddressType addr, TAddressType size) override {
-        std::cerr << "Read memory " << (addr & 0xFFFFFF) << " with size " << size << std::endl;
+        ferr << "Read memory " << (addr & 0xFFFFFF) << " with size " << size << std::endl;
 
         if (size > 1 && addr % 2 != 0) {
             return tl::unexpected<TError>(TError::UnalignedMemoryAccess, "memory access at address %#08x of size %d", addr, size);
@@ -108,7 +111,7 @@ std::vector<std::pair<TAddressType, TByte>> GetRamDiff(const TRamSnapshot& ram0,
 json LoadTestFile(std::string_view path) {
     std::ifstream f(path.data());
     json data = json::parse(f);
-    std::cerr << "\"" << path << "\" parsed" << std::endl;
+    ferr << "\"" << path << "\" parsed" << std::endl;
     return data;
 }
 
@@ -168,7 +171,7 @@ bool WorkOnTest(const json& test) {
     const auto err = NEmulator::Emulate(ctx);
 
     if (err) {
-        std::cerr << "Got error: " << err->GetWhat() << std::endl;
+        ferr << "Got error: " << err->GetWhat() << std::endl;
 
         // this program counter means there really was an illegal instruction
         return (expectedRegs.PC == 0x1400);
@@ -181,32 +184,32 @@ bool WorkOnTest(const json& test) {
     const bool ramDiffers = GetRamDiff(actualRam0, actualRam1) != GetRamDiff(expectedRam0, expectedRam1);
 
     if (regsDiff || ramDiffers) {
-        std::cerr << "Test name: \"" << test["name"].get<std::string>() << "\"" << std::endl << std::endl;
+        ferr << "Test name: \"" << test["name"].get<std::string>() << "\"" << std::endl << std::endl;
 
         if (regsDiff) {
-            std::cerr << "Initial registers:" << std::endl;
-            std::cerr << Dump(initRegs) << std::endl;
+            ferr << "Initial registers:" << std::endl;
+            ferr << Dump(initRegs) << std::endl;
 
-            std::cerr << "Actual final registers:" << std::endl;
-            std::cerr << Dump(actualRegs) << std::endl;
+            ferr << "Actual final registers:" << std::endl;
+            ferr << Dump(actualRegs) << std::endl;
 
-            std::cerr << "Expected final registers:" << std::endl;
-            std::cerr << Dump(expectedRegs) << std::endl;
+            ferr << "Expected final registers:" << std::endl;
+            ferr << Dump(expectedRegs) << std::endl;
 
-            std::cerr << "Differing registers: " << *regsDiff << std::endl << std::endl;
+            ferr << "Differing registers: " << *regsDiff << std::endl << std::endl;
         }
 
         if (ramDiffers) {
-            std::cerr << "Initial RAM:" << std::endl;
-            std::cerr << DumpRamSnapshot(actualRam0) << std::endl;
+            ferr << "Initial RAM:" << std::endl;
+            ferr << DumpRamSnapshot(actualRam0) << std::endl;
 
-            std::cerr << "Actual RAM:" << std::endl;
-            std::cerr << DumpRamSnapshot(actualRam1) << std::endl;
+            ferr << "Actual RAM:" << std::endl;
+            ferr << DumpRamSnapshot(actualRam1) << std::endl;
 
-            std::cerr << "Expected RAM:" << std::endl;
-            std::cerr << DumpRamSnapshot(expectedRam1) << std::endl;
+            ferr << "Expected RAM:" << std::endl;
+            ferr << DumpRamSnapshot(expectedRam1) << std::endl;
 
-            std::cerr << "RAM differs" << std::endl;
+            ferr << "RAM differs" << std::endl;
         }
 
         return false;
@@ -217,7 +220,7 @@ bool WorkOnTest(const json& test) {
 
 bool WorkOnFile(const json& file) {
     std::size_t size = file.size();
-    std::cerr << "work on file with " << size << " tests" << std::endl;
+    ferr << "work on file with " << size << " tests" << std::endl;
 
     int passed = 0;
     int failed = 0;
@@ -225,7 +228,7 @@ bool WorkOnFile(const json& file) {
 
     for (std::size_t i = 0; i < size; ++i) {
         const bool ok = WorkOnTest(file[i]);
-        std::cerr << (i + 1) << "/" << size << " test is " << (ok ? "OK" : "FAIL") << std::endl;
+        ferr << (i + 1) << "/" << size << " test is " << (ok ? "OK" : "FAIL") << std::endl;
 
         --ignored;
         if (ok) {
@@ -235,10 +238,10 @@ bool WorkOnFile(const json& file) {
             //break;
         }
     }
-    std::cerr << "TOTAL TESTS: " << size << std::endl;
-    std::cerr << "PASSED TESTS: " << passed << std::endl;
-    std::cerr << "FAILED TESTS: " << failed << std::endl;
-    std::cerr << "IGNORED TESTS: " << ignored << std::endl;
+    ferr << "TOTAL TESTS: " << size << std::endl;
+    ferr << "PASSED TESTS: " << passed << std::endl;
+    ferr << "FAILED TESTS: " << failed << std::endl;
+    ferr << "IGNORED TESTS: " << ignored << std::endl;
     return passed == size;
 }
 
@@ -263,16 +266,53 @@ int main() {
         return lhs.size() < rhs.size();
     });
 
-    int from = 85;
-    int to = 87;
+    const auto shouldRunTest = [](int index) {
+        if (index >= 1 && index <= 26) return true;
+        if (index >= 28 && index <= 30) return true;
+        if (index >= 39 && index <= 41) return true;
+        if (index >= 51 && index <= 56) return true;
+        if (index >= 75 && index <= 87) return true;
+        return false;
+    };
 
-    int num = 0;
-    for (const auto& path : paths) {
-        ++num;
-        if (num < from || num > to) continue;
-        auto file = LoadTestFile(path);
-        if (!WorkOnFile(file)) {
-            //break;
-        }
+    constexpr int threadCount = 10;
+    std::mutex mut;
+    int curIndex = 1;
+    int totalCount = 0;
+
+    fs::remove_all("logs");
+    fs::create_directories("logs");
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < threadCount; ++i) {
+        threads.emplace_back([&]() {
+            while (true) {
+                std::string path;
+                {
+                    std::lock_guard guard{mut};
+                    while (curIndex <= paths.size() && !shouldRunTest(curIndex)) {
+                        ++curIndex;
+                    }
+                    if (curIndex > paths.size()) {
+                        return;
+                    }
+                    path = paths[curIndex - 1];
+                    std::cerr << "working of file " << path.substr(path.rfind('/') + 1) << std::endl;
+                    ++curIndex;
+                    ++totalCount;
+                }
+
+                std::string part = path.substr(path.rfind('/') + 1);
+                part = part.substr(0, part.rfind('.'));
+                ferr = std::ofstream{"logs/" + part};
+
+                auto file = LoadTestFile(path);
+                WorkOnFile(file);
+            }
+        });
     }
+    for (auto& t : threads) {
+        t.join();
+    }
+    std::cerr << "Total file count: " << totalCount << std::endl;
 }

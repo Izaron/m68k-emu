@@ -612,13 +612,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return target;
     };
 
-    const auto parseTarget = [&]() {
-        return parseTargetWithSize(getSize0());
-    };
-
-#define PARSE_TARGET_SAFE                               \
-    auto dst = parseTarget();                           \
+#define PARSE_TARGET_WITH_SIZE_SAFE(size)               \
+    auto dst = parseTargetWithSize(size);               \
     if (!dst) { return tl::unexpected(dst.error()); }
+
+#define PARSE_TARGET_SAFE PARSE_TARGET_WITH_SIZE_SAFE(getSize0())
 
     // decode the opcode
     TInstruction inst;
@@ -637,10 +635,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         for (auto [kind, registerMask, immediateMask] : cases) {
             if (applyMask(0b1111'0001'1100'0000) == registerMask) {
                 auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-
-                PARSE_TARGET_SAFE;
-                dst->SetSize(Byte);
-
+                PARSE_TARGET_WITH_SIZE_SAFE(Byte);
                 inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
                 return true;
             }
@@ -649,10 +644,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
                 auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
                 pc += 2;
 
-                PARSE_TARGET_SAFE;
-                dst->SetSize(Byte);
-
+                PARSE_TARGET_WITH_SIZE_SAFE(Byte);
                 inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(Byte);
+                return true;
             }
         }
         return false;
@@ -693,8 +687,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             if (applyMask(0b1111'1000'1100'0000) == 0b1110'0000'1100'0000 && getBits(9, 2) == index) {
                 // operation on any memory, shift by 1
                 auto kind = getBit(8) ? leftKind : rightKind;
-                auto dst = parseTargetWithSize(Word);
-                if (!dst) { return tl::unexpected(dst.error()); }
+                PARSE_TARGET_WITH_SIZE_SAFE(Word);
                 inst.SetKind(kind).SetDst(*dst).SetSize(Word).SetData(1);
                 return true;
             }
@@ -798,13 +791,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (applyMask(0b1111'0000'1100'0000) == 0b1101'0000'1100'0000) {
         const auto size = getBit(8) ? Long : Word;
-
-        auto src = parseTargetWithSize(size);
-        if (!src) { return tl::unexpected(src.error()); }
-
-        auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
-
-        inst.SetKind(AddaKind).SetSrc(*src).SetDst(dst).SetSize(size);
+        auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
+        PARSE_TARGET_WITH_SIZE_SAFE(size);
+        std::swap(src, *dst);
+        inst.SetKind(AddaKind).SetSrc(src).SetDst(*dst).SetSize(size);
     }
     else if (applyMask(0b1111'0001'0011'0000) == 0b1101'0001'0000'0000) {
         const auto size = getSize0();
