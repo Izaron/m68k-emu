@@ -36,6 +36,8 @@ public:
         NegxKind,       // NEGX
         NopKind,        // NOP
         NotKind,        // NOT
+        OrKind,         // OR
+        OriKind,        // ORI
     };
 
     enum ESize : uint8_t {

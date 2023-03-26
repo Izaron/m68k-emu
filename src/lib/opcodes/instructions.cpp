@@ -13,6 +13,7 @@ enum EOpcodeType {
     AddType,
     AndType,
     EorType,
+    OrType,
 };
 
 EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
@@ -25,6 +26,9 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     if (kind >= TInstruction::EorKind && kind <= TInstruction::EoriKind) {
         return EorType;
     }
+    if (kind >= TInstruction::OrKind && kind <= TInstruction::OriKind) {
+        return OrType;
+    }
     __builtin_unreachable();
 }
 
@@ -33,6 +37,7 @@ auto DoBinaryOp(EOpcodeType type, auto lhs, auto rhs) {
         case AddType: return lhs + rhs;
         case AndType: return lhs & rhs;
         case EorType: return lhs ^ rhs;
+        case OrType: return  lhs | rhs;
         default: __builtin_unreachable();
     }
 }
@@ -216,7 +221,9 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case AndKind:
         case AndiKind:
         case EorKind:
-        case EoriKind: {
+        case EoriKind:
+        case OrKind:
+        case OriKind: {
             const auto type = GetOpcodeType(Kind_);
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
@@ -713,13 +720,14 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Immediate operations: ADDI, ANDI
+     * Immediate operations: ADDI, ANDI, EORI, ORI
      */
     const auto tryParseImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 3> cases{
-            std::make_tuple(AddiKind, 3),
+        constexpr std::array<TCase, 4> cases{
+            std::make_tuple(OriKind, 0),
             std::make_tuple(AndiKind, 1),
+            std::make_tuple(AddiKind, 3),
             std::make_tuple(EoriKind, 5),
         };
 
@@ -738,14 +746,15 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Binary operations: ADD, AND, EOR
+     * Binary operations: ADD, AND, EOR, OR
      */
     const auto tryParseBinaryOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 3> cases{
-            std::make_tuple(AddKind, 5),
-            std::make_tuple(AndKind, 4),
+        constexpr std::array<TCase, 4> cases{
+            std::make_tuple(OrKind, 0),
             std::make_tuple(EorKind, 3),
+            std::make_tuple(AndKind, 4),
+            std::make_tuple(AddKind, 5),
         };
 
         for (auto [kind, index] : cases) {
