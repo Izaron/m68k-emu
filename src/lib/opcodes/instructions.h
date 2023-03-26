@@ -40,6 +40,8 @@ public:
         NotKind,        // NOT
         OrKind,         // OR
         OriKind,        // ORI
+        OriToCcrKind,   // ORItoCCR
+        OriToSrKind,    // ORItoSR
     };
 
     enum ESize : uint8_t {

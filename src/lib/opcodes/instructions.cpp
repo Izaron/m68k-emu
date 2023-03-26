@@ -26,7 +26,7 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     if (kind >= TInstruction::EorKind && kind <= TInstruction::EoriToSrKind) {
         return EorType;
     }
-    if (kind >= TInstruction::OrKind && kind <= TInstruction::OriKind) {
+    if (kind >= TInstruction::OrKind && kind <= TInstruction::OriToSrKind) {
         return OrType;
     }
     __builtin_unreachable();
@@ -292,21 +292,19 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case AndiToCcrKind:
-        case EoriToCcrKind: {
+        case EoriToCcrKind:
+        case OriToCcrKind: {
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
             auto& sr = ctx.Registers.SR;
             sr = (sr & ~0xFF) | DoBinaryOp(GetOpcodeType(Kind_), sr & 0xFF, *srcVal);
             break;
         }
         case AndiToSrKind:
-        case EoriToSrKind: {
+        case EoriToSrKind:
+        case OriToSrKind: {
             SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
-            auto val = *srcVal;
-            if (Kind_ == EoriToSrKind) {
-                // TODO: find out why bits 12 and 14 matter
-                val &= 0b1010'1111'1111'1111;
-            }
-            ctx.Registers.SR = DoBinaryOp(GetOpcodeType(Kind_), ctx.Registers.SR, val);
+            // TODO: find out why bits 12 and 14 matter
+            ctx.Registers.SR = DoBinaryOp(GetOpcodeType(Kind_), ctx.Registers.SR, *srcVal & 0b1010'1111'1111'1111);
             break;
         }
         case AslKind:
@@ -633,7 +631,8 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
      */
     const auto tryParseStatusRegisterOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, EKind, int>;
-        constexpr std::array<TCase, 2> cases{
+        constexpr std::array<TCase, 3> cases{
+            std::make_tuple(OriToCcrKind, OriToSrKind, 0),
             std::make_tuple(AndiToCcrKind, AndiToSrKind, 1),
             std::make_tuple(EoriToCcrKind, EoriToSrKind, 5),
         };
