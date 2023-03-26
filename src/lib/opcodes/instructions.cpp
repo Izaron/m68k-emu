@@ -191,11 +191,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             const bool carry = IsCarry(result, Size_);
-            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
-            ctx.Registers.SetCarryFlag(carry);
             ctx.Registers.SetExtendFlag(carry);
-            ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
+            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
+            ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
+            ctx.Registers.SetCarryFlag(carry);
             break;
         }
         case AddaKind: {
@@ -625,9 +625,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Simple operations: NEG, NEGX, CLR, NOT
+     * Unary operations: NEG, NEGX, CLR, NOT
      */
-    const auto tryParseSimpleOpcodes = [&]() -> tl::expected<bool, TError> {
+    const auto tryParseUnaryOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, TWord>;
         constexpr std::array<TCase, 4> cases{
             std::make_tuple(NegxKind, 0b0100'0000'0000'0000),
@@ -767,7 +767,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (!getBit(8)) {
             std::swap(src, *dst);
         }
-
         inst.SetKind(AddKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0110'0000'0000'0000) {
@@ -798,7 +797,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
 
         TRY_PARSE(tryParseBitOpcodes);
-        TRY_PARSE(tryParseSimpleOpcodes);
+        TRY_PARSE(tryParseUnaryOpcodes);
         TRY_PARSE(tryParseShiftOpcodes);
         TRY_PARSE(tryParseImmediateOpcodes);
 
