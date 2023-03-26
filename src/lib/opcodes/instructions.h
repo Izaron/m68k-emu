@@ -43,6 +43,7 @@ public:
         MoveKind,           // MOVE
         MoveToCcrKind,      // MOVEtoCCR
         MoveToSrKind,       // MOVEtoSR
+        MoveToUspKind,      // MOVEfromUSP
         MoveaKind,          // MOVEA
         MoveqKind,          // MOVEQ
         NegKind,            // NEG

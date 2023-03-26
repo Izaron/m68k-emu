@@ -377,6 +377,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteWord(ctx, ctx.Registers.SR));
             break;
         }
+        case MoveToUspKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadLong(ctx));
+            ctx.Registers.USP = *srcVal;
+            break;
+        }
         case MoveFromUspKind: {
             SAFE_CALL(Dst_.WriteLong(ctx, ctx.Registers.USP));
             break;
@@ -981,6 +986,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (applyMask(0b1111'1111'1100'0000) == 0b0100'0000'1100'0000) {
             PARSE_TARGET_WITH_SIZE_SAFE(Word);
             inst.SetKind(MoveFromSrKind).SetDst(*dst);
+            return true;
+        }
+        // MOVEtoUSP
+        if (applyMask(0b1111'1111'1111'1000) == 0b0100'1110'0110'0000) {
+            auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(0, 3));
+            inst.SetKind(MoveToUspKind).SetSrc(src);
             return true;
         }
         // MOVEfromUSP
