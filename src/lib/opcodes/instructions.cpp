@@ -252,7 +252,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
-        case AddaKind: {
+        case AddaKind:
+        case SubaKind: {
             TLongLong src;
             if (Size_ == Word) {
                 SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
@@ -262,7 +263,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 src = *srcVal;
             }
             SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
-            const TLongLong result = src + *dstVal;
+            const TLongLong result = DoBinaryOp(GetOpcodeType(Kind_), src, *dstVal);
             SAFE_CALL(Dst_.WriteSized(ctx, result, Long));
             break;
         }
@@ -828,6 +829,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         PARSE_TARGET_WITH_SIZE_SAFE(size);
         std::swap(src, *dst);
         inst.SetKind(AddaKind).SetSrc(src).SetDst(*dst).SetSize(size);
+    }
+    else if (applyMask(0b1111'0000'1100'0000) == 0b1001'0000'1100'0000) {
+        const auto size = getBit(8) ? Long : Word;
+        auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
+        PARSE_TARGET_WITH_SIZE_SAFE(size);
+        std::swap(src, *dst);
+        inst.SetKind(SubaKind).SetSrc(src).SetDst(*dst).SetSize(size);
     }
     else if (applyMask(0b1111'0001'0011'0000) == 0b1101'0001'0000'0000) {
         const auto size = getSize0();

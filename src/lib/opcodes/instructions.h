@@ -43,6 +43,7 @@ public:
         OriToCcrKind,   // ORItoCCR
         OriToSrKind,    // ORItoSR
         SubKind,        // SUB
+        SubaKind,       // SUBA
         SubiKind,       // SUBI
         SubqKind,       // SUBQ
     };
