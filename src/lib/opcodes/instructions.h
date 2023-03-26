@@ -42,6 +42,9 @@ public:
         OriKind,        // ORI
         OriToCcrKind,   // ORItoCCR
         OriToSrKind,    // ORItoSR
+        SubKind,        // SUB
+        SubiKind,       // SUBI
+        SubqKind,       // SUBQ
     };
 
     enum ESize : uint8_t {

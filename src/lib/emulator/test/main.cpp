@@ -272,6 +272,7 @@ int main() {
         if (index >= 39 && index <= 43) return true;
         if (index >= 51 && index <= 56) return true;
         if (index >= 75 && index <= 89) return true;
+        if (index >= 109 && index <= 111) return true;
         return false;
     };
 

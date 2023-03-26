@@ -14,6 +14,7 @@ enum EOpcodeType {
     AndType,
     EorType,
     OrType,
+    SubType,
 };
 
 EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
@@ -29,6 +30,9 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     if (kind >= TInstruction::OrKind && kind <= TInstruction::OriToSrKind) {
         return OrType;
     }
+    if (kind >= TInstruction::SubKind && kind <= TInstruction::SubqKind) {
+        return SubType;
+    }
     __builtin_unreachable();
 }
 
@@ -38,6 +42,7 @@ auto DoBinaryOp(EOpcodeType type, auto lhs, auto rhs) {
         case AndType: return lhs & rhs;
         case EorType: return lhs ^ rhs;
         case OrType: return  lhs | rhs;
+        case SubType: return rhs - lhs;
         default: __builtin_unreachable();
     }
 }
@@ -68,8 +73,8 @@ bool GetMsb(TLongLong value, TInstruction::ESize size) {
     return (value >> (BitCount(size) - 1)) & 1;
 }
 
-bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ESize size) {
-    const bool lhsMsb = GetMsb(lhs, size);
+bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ESize size, EOpcodeType type = AddType) {
+    const bool lhsMsb = GetMsb(lhs, size) ^ (type == EOpcodeType::SubType ? 1 : 0);
     const bool rhsMsb = GetMsb(rhs, size);
     const bool resultMsb = GetMsb(result, size);
     return (lhsMsb && rhsMsb && !resultMsb) || (!lhsMsb && !rhsMsb && resultMsb);
@@ -223,7 +228,9 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case EorKind:
         case EoriKind:
         case OrKind:
-        case OriKind: {
+        case OriKind:
+        case SubKind:
+        case SubiKind: {
             const auto type = GetOpcodeType(Kind_);
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
@@ -231,13 +238,13 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             const bool carry = IsCarry(result, Size_);
-            if (type == AddType) {
+            if (type == AddType || type == SubType) {
                 ctx.Registers.SetExtendFlag(carry);
             }
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            if (type == AddType) {
-                ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
+            if (type == AddType || type == SubType) {
+                ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_, type));
                 ctx.Registers.SetCarryFlag(carry);
             } else {
                 ctx.Registers.SetOverflowFlag(0);
@@ -259,10 +266,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteSized(ctx, result, Long));
             break;
         }
-        case AddqKind: {
+        case AddqKind:
+        case SubqKind: {
+            const auto type = GetOpcodeType(Kind_);
             const TLongLong srcVal = Data_ ? Data_ : 8;
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
-            const TLongLong result = srcVal + *dstVal;
+            const TLongLong result = DoBinaryOp(type, srcVal, *dstVal);
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             if (Dst_.GetKind() != TTarget::AddressRegisterKind) {
@@ -270,7 +279,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
                 ctx.Registers.SetCarryFlag(carry);
                 ctx.Registers.SetExtendFlag(carry);
-                ctx.Registers.SetOverflowFlag(IsOverflow(srcVal, *dstVal, result, Size_));
+                ctx.Registers.SetOverflowFlag(IsOverflow(srcVal, *dstVal, result, Size_, type));
                 ctx.Registers.SetZeroFlag(IsZero(result, Size_));
             }
             break;
@@ -747,9 +756,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
      */
     const auto tryParseImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 4> cases{
+        constexpr std::array<TCase, 5> cases{
             std::make_tuple(OriKind, 0),
             std::make_tuple(AndiKind, 1),
+            std::make_tuple(SubiKind, 2),
             std::make_tuple(AddiKind, 3),
             std::make_tuple(EoriKind, 5),
         };
@@ -769,12 +779,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Binary operations: ADD, AND, EOR, OR
+     * Binary operations: ADD, AND, EOR, OR, SUB
      */
     const auto tryParseBinaryOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 4> cases{
+        constexpr std::array<TCase, 5> cases{
             std::make_tuple(OrKind, 0),
+            std::make_tuple(SubKind, 1),
             std::make_tuple(EorKind, 3),
             std::make_tuple(AndKind, 4),
             std::make_tuple(AddKind, 5),
@@ -800,6 +811,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
         PARSE_TARGET_SAFE;
         inst.SetKind(AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
+    }
+    else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0001'0000'0000) {
+        PARSE_TARGET_SAFE;
+        inst.SetKind(SubqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0001'1111'0000) == 0b1100'0001'0000'0000) {
         const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
