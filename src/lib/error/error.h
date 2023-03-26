@@ -6,10 +6,11 @@ class TError {
 public:
     enum EKind {
         NoError,
-        UnknownOpcode,
-        UnknownAddressingMode,
-        UnalignedMemoryAccess,
+        UnalignedMemoryRead,
+        UnalignedMemoryWrite,
         UnalignedProgramCounter,
+        UnknownAddressingMode,
+        UnknownOpcode,
     };
 
     TError() = default;

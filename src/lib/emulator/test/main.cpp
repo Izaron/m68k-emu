@@ -38,7 +38,7 @@ public:
         ferr << "Read memory " << (addr & 0xFFFFFF) << " with size " << size << std::endl;
 
         if (size > 1 && addr % 2 != 0) {
-            return tl::unexpected<TError>(TError::UnalignedMemoryAccess, "memory access at address %#08x of size %d", addr, size);
+            return tl::unexpected<TError>(TError::UnalignedMemoryRead, "memory read at address %#08x of size %d", addr, size);
         }
 
         TDataHolder res;
@@ -53,6 +53,10 @@ public:
     }
 
     std::optional<TError> Write(TAddressType addr, TDataView data) override {
+        if (data.size() > 1 && addr % 2 != 0) {
+            return TError{TError::UnalignedMemoryWrite, "memory write at address %#08x of size %d", addr, data.size()};
+        }
+
         for (const auto value : data) {
             const auto realAddr = addr & 0xFFFFFF;
             if (value != 0 || Values_.contains(realAddr)) {
@@ -270,7 +274,8 @@ int main() {
         if (index >= 1 && index <= 26) return true;
         if (index >= 28 && index <= 35) return true;
         if (index >= 39 && index <= 43) return true;
-        if (index >= 51 && index <= 56) return true;
+        if (index >= 51 && index <= 58) return true;
+        if (index >= 60 && index <= 60) return true;
         if (index >= 75 && index <= 89) return true;
         if (index >= 109 && index <= 116) return true;
         return false;

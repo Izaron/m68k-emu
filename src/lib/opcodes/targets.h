@@ -60,6 +60,7 @@ private:
     TWord ExtWord0_;
     TWord ExtWord1_;
     TLong Address_;
+    bool AlreadyDecremented_;
 };
 
 } // namespace NOpcodes

@@ -536,6 +536,21 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
+        case MoveKind: {
+            auto tmp = ctx.Registers.PC;
+            ctx.Registers.PC = Data_;
+            SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
+            tryIncAddressSrc();
+            ctx.Registers.PC = tmp;
+
+            SAFE_CALL(Dst_.WriteSized(ctx, *srcVal, Size_));
+
+            ctx.Registers.SetNegativeFlag(GetMsb(*srcVal, Size_));
+            ctx.Registers.SetZeroFlag(IsZero(*srcVal, Size_));
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -587,11 +602,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         }
     };
 
-    const auto parseTargetWithSize = [&](ESize size) -> tl::expected<TTarget, TError> {
+    const auto parseTargetWithSize = [&](ESize size, std::size_t modeBegin, std::size_t indexBegin) -> tl::expected<TTarget, TError> {
         TTarget target;
 
-        const auto mode = getBits(3, 3);
-        const auto xn = getBits(0, 3);
+        const auto mode = getBits(modeBegin, 3);
+        const auto xn = getBits(indexBegin, 3);
 
         switch (mode) {
             case 0: {
@@ -667,7 +682,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
 #define PARSE_TARGET_WITH_SIZE_SAFE(size)               \
-    auto dst = parseTargetWithSize(size);               \
+    auto dst = parseTargetWithSize(size, 3, 0);         \
+    if (!dst) { return tl::unexpected(dst.error()); }
+
+#define PARSE_TARGET_WITH_ARGS_SAFE(dst, size, modeBegin, indexBegin)  \
+    auto dst = parseTargetWithSize(size, modeBegin, indexBegin);       \
     if (!dst) { return tl::unexpected(dst.error()); }
 
 #define PARSE_TARGET_SAFE PARSE_TARGET_WITH_SIZE_SAFE(getSize0())
@@ -874,6 +893,29 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
+    /*
+     * Moves: MOVE
+     */
+    const auto tryParseMoveOpcodes = [&]() -> tl::expected<bool, TError> {
+        if (applyMask(0b1100'0000'0000'0000) == 0b0000'0000'0000'0000) {
+            std::optional<ESize> size;
+            switch (getBits(12, 2)) {
+                case 1: size = Byte; break;
+                case 3: size = Word; break;
+                case 2: size = Long; break;
+                default: break;
+            }
+            if (size) {
+                PARSE_TARGET_WITH_ARGS_SAFE(src, *size, 3, 0);
+                TLong pc = ctx.Registers.PC; // remember current program counter
+                PARSE_TARGET_WITH_ARGS_SAFE(dst, *size, 6, 9);
+                inst.SetKind(MoveKind).SetSrc(*src).SetDst(*dst).SetSize(*size).SetData(pc);
+                return true;
+            }
+        }
+        return false;
+    };
+
     if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -934,6 +976,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         TRY_PARSE_SAFE(tryParseBinaryOnAddressOpcodes);
         TRY_PARSE_SAFE(tryParseBinaryOnImmediateOpcodes);
         TRY_PARSE_SAFE(tryParseBinaryOpcodes);
+        TRY_PARSE_SAFE(tryParseMoveOpcodes);
 
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
     }

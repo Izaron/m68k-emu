@@ -41,6 +41,9 @@ int8_t GetScaleValue(int8_t mode) {
 
 TTarget& TTarget::SetKind(EKind kind) {
     Kind_ = kind;
+    if (Kind_ == AddressDecrementKind) {
+        AlreadyDecremented_ = false;
+    }
     return *this;
 }
 
@@ -70,12 +73,13 @@ TTarget& TTarget::SetAddress(TLong address) {
 }
 
 void TTarget::TryDecrementAddress(NEmulator::TContext ctx) {
-    if (Kind_ == AddressDecrementKind) {
+    if (Kind_ == AddressDecrementKind && !AlreadyDecremented_) {
         auto& reg = GetAReg(ctx.Registers, Index_);
 
         // stack pointer should be aligned to a word boundary
         reg -= (Index_ == 7) ? std::max((int)Size_, 2) : Size_;
     }
+    AlreadyDecremented_ = true;
 }
 
 void TTarget::TryIncrementAddress(NEmulator::TContext ctx) {
@@ -199,6 +203,8 @@ tl::expected<TLong, TError> TTarget::ReadLong(NEmulator::TContext ctx) {
 }
 
 std::optional<TError> TTarget::Write(NEmulator::TContext ctx, TDataView data) {
+    TryDecrementAddress(ctx);
+
     const auto writeRegister = [data](TLong& reg) {
         TLong shift = 0;
         TLong lsb = 0;
