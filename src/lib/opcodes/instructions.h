@@ -40,6 +40,7 @@ public:
         LsrKind,        // LSR
         MoveKind,       // MOVE
         MoveaKind,      // MOVEA
+        MoveqKind,      // MOVEQ
         NegKind,        // NEG
         NegxKind,       // NEGX
         NopKind,        // NOP

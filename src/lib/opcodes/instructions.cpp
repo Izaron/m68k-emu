@@ -570,6 +570,16 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteLong(ctx, src));
             break;
         }
+        case MoveqKind: {
+            TLongLong src = static_cast<TSignedLongLong>(static_cast<TSignedByte>(Data_));
+            SAFE_CALL(Dst_.WriteLong(ctx, src));
+
+            ctx.Registers.SetNegativeFlag(GetMsb(src, Long));
+            ctx.Registers.SetZeroFlag(IsZero(src, Long));
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -913,7 +923,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Moves: MOVE
+     * Moves: MOVE, MOVEA, MOVEQ
      */
     const auto tryParseMoveOpcodes = [&]() -> tl::expected<bool, TError> {
         if (applyMask(0b1100'0000'0000'0000) == 0b0000'0000'0000'0000) {
@@ -932,6 +942,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
                 inst.SetKind(kind).SetSrc(*src).SetDst(*dst).SetSize(*size).SetData(pc);
                 return true;
             }
+        }
+        if (applyMask(0b1111'0001'0000'0000) == 0b0111'0000'0000'0000) {
+            auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+            inst.SetKind(MoveqKind).SetData(getBits(0, 8)).SetDst(dst);
+            return true;
         }
         return false;
     };
