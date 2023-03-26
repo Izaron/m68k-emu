@@ -34,6 +34,7 @@ public:
 
     // helper methods
     EKind GetKind() const { return Kind_; }
+    uint8_t GetIndex() const { return Index_; }
 
     // read methods
     tl::expected<TDataHolder, TError> Read(NEmulator::TContext ctx, TAddressType size);

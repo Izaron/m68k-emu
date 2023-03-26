@@ -12,6 +12,7 @@ namespace {
 enum EOpcodeType {
     AddType,
     AndType,
+    CmpType,
     EorType,
     OrType,
     SubType,
@@ -23,6 +24,9 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     }
     if (kind >= TInstruction::AndKind && kind <= TInstruction::AndiToSrKind) {
         return AndType;
+    }
+    if (kind >= TInstruction::CmpKind && kind <= TInstruction::CmpmKind) {
+        return CmpType;
     }
     if (kind >= TInstruction::EorKind && kind <= TInstruction::EoriToSrKind) {
         return EorType;
@@ -43,8 +47,13 @@ auto DoBinaryOp(EOpcodeType type, auto lhs, auto rhs) {
         case EorType: return lhs ^ rhs;
         case OrType: return  lhs | rhs;
         case SubType: return rhs - lhs;
+        case CmpType: return rhs - lhs;
         default: __builtin_unreachable();
     }
+}
+
+bool IsSubstractOp(EOpcodeType type) {
+    return type == SubType || type == CmpType;
 }
 
 bool IsCarry(TLongLong value, TInstruction::ESize size) {
@@ -74,7 +83,7 @@ bool GetMsb(TLongLong value, TInstruction::ESize size) {
 }
 
 bool IsOverflow(TLongLong lhs, TLongLong rhs, TLongLong result, TInstruction::ESize size, EOpcodeType type = AddType) {
-    const bool lhsMsb = GetMsb(lhs, size) ^ (type == EOpcodeType::SubType ? 1 : 0);
+    const bool lhsMsb = GetMsb(lhs, size) ^ (IsSubstractOp(type) ? 1 : 0);
     const bool rhsMsb = GetMsb(rhs, size);
     const bool resultMsb = GetMsb(result, size);
     return (lhsMsb && rhsMsb && !resultMsb) || (!lhsMsb && !rhsMsb && resultMsb);
@@ -181,6 +190,19 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         }
     };
 
+    const auto tryIncAddress = [&](TTarget& target, bool hasFlag, bool& usedFlag) {
+        if (hasFlag && !usedFlag) {
+            target.TryIncrementAddress(ctx);
+        }
+        usedFlag = true;
+    };
+
+    bool usedSrcInc = false;
+    const auto tryIncAddressSrc = [&]() { return tryIncAddress(Src_, HasSrc_, usedSrcInc); };
+
+    bool usedDstInc = false;
+    const auto tryIncAddressDst = [&]() { return tryIncAddress(Dst_, HasDst_, usedDstInc); };
+
     switch (Kind_) {
         case AbcdKind: {
             SAFE_DECLARE(srcVal, Src_.ReadByte(ctx));
@@ -225,17 +247,24 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case AddiKind:
         case AndKind:
         case AndiKind:
+        case CmpKind:
+        case CmpiKind:
+        case CmpmKind:
         case EorKind:
         case EoriKind:
         case OrKind:
         case OriKind:
         case SubKind:
         case SubiKind: {
-            const auto type = GetOpcodeType(Kind_);
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
+            tryIncAddressSrc();
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
+
+            const auto type = GetOpcodeType(Kind_);
             const TLongLong result = DoBinaryOp(type, *srcVal, *dstVal);
-            SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
+            if (type != CmpType) {
+                SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
+            }
 
             const bool carry = IsCarry(result, Size_);
             if (type == AddType || type == SubType) {
@@ -243,7 +272,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            if (type == AddType || type == SubType) {
+            if (type == AddType || type == SubType || type == CmpType) {
                 ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_, type));
                 ctx.Registers.SetCarryFlag(carry);
             } else {
@@ -500,12 +529,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         }
     }
 
-    if (HasSrc_) {
-        Src_.TryIncrementAddress(ctx);
-    }
-    if (HasDst_) {
-        Dst_.TryIncrementAddress(ctx);
-    }
+    tryIncAddressSrc();
+    tryIncAddressDst();
 
     return std::nullopt;
 }
@@ -759,12 +784,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
      */
     const auto tryParseImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 5> cases{
+        constexpr std::array<TCase, 6> cases{
             std::make_tuple(OriKind, 0),
             std::make_tuple(AndiKind, 1),
             std::make_tuple(SubiKind, 2),
             std::make_tuple(AddiKind, 3),
             std::make_tuple(EoriKind, 5),
+            std::make_tuple(CmpiKind, 6),
         };
 
         for (auto [kind, index] : cases) {
@@ -799,6 +825,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
                 auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
                 PARSE_TARGET_SAFE;
                 if (!getBit(8)) {
+                    if (kind == EorKind) {
+                        // some hack
+                        kind = CmpKind;
+                    }
                     std::swap(src, *dst);
                 }
                 inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
@@ -852,6 +882,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         } else {
             inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
         }
+    }
+    else if (applyMask(0b1111'0001'0011'1000) == 0b1011'0001'0000'1000) {
+        const auto size = getSize0();
+        auto src = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(0, 3)).SetSize(size);
+        auto dst = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(9, 3)).SetSize(size);
+        inst.SetKind(CmpmKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
     else {
 
