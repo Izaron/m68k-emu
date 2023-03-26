@@ -46,6 +46,7 @@ public:
         SubaKind,       // SUBA
         SubiKind,       // SUBI
         SubqKind,       // SUBQ
+        SubxKind,       // SUBX
     };
 
     enum ESize : uint8_t {

@@ -30,7 +30,7 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     if (kind >= TInstruction::OrKind && kind <= TInstruction::OriToSrKind) {
         return OrType;
     }
-    if (kind >= TInstruction::SubKind && kind <= TInstruction::SubqKind) {
+    if (kind >= TInstruction::SubKind && kind <= TInstruction::SubxKind) {
         return SubType;
     }
     __builtin_unreachable();
@@ -285,17 +285,19 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
-        case AddxKind: {
+        case AddxKind:
+        case SubxKind: {
+            const auto type = GetOpcodeType(Kind_);
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
-            const TLongLong result = *srcVal + *dstVal + ctx.Registers.GetExtendFlag();
+            const TLongLong result = DoBinaryOp(type, *srcVal + ctx.Registers.GetExtendFlag(), *dstVal);
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             const bool carry = IsCarry(result, Size_);
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetCarryFlag(carry);
             ctx.Registers.SetExtendFlag(carry);
-            ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
+            ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_, type));
             if (!IsZero(result, Size_)) {
                 ctx.Registers.SetZeroFlag(0);
             }
@@ -843,6 +845,13 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
         inst.SetKind(AddxKind).SetSrc(src).SetDst(dst).SetSize(size);
+    }
+    else if (applyMask(0b1111'0001'0011'0000) == 0b1001'0001'0000'0000) {
+        const auto size = getSize0();
+        const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
+        auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
+        auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
+        inst.SetKind(SubxKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0110'0000'0000'0000) {
         const auto cond = static_cast<ECondition>(getBits(8, 4));
