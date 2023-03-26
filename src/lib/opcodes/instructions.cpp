@@ -352,12 +352,25 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             sr = (sr & ~0xFF) | DoBinaryOp(GetOpcodeType(Kind_), sr & 0xFF, *srcVal);
             break;
         }
+        case MoveToCcrKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
+            auto& sr = ctx.Registers.SR;
+            sr = (sr & ~0xFF) | (*srcVal & 0xFF);
+            break;
+        }
         case AndiToSrKind:
         case EoriToSrKind:
         case OriToSrKind: {
             SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
             // TODO: find out why bits 12 and 14 matter
             ctx.Registers.SR = DoBinaryOp(GetOpcodeType(Kind_), ctx.Registers.SR, *srcVal & 0b1010'1111'1111'1111);
+            break;
+        }
+        case MoveToSrKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
+            tryIncAddressSrc();
+            // TODO: find out why bits 12 and 14 matter
+            ctx.Registers.SR = *srcVal & 0b1010'1111'1111'1111;
             break;
         }
         case AslKind:
@@ -791,7 +804,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             std::make_tuple(NotKind,  0b0100'0110'0000'0000),
         };
         for (auto [kind, mask] : cases) {
-            if (applyMask(0b1111'1111'0000'0000) == mask) {
+            if (applyMask(0b1111'1111'0000'0000) == mask && getBits(6, 2) != 3) {
                 PARSE_TARGET_SAFE;
                 inst.SetKind(kind).SetDst(*dst).SetSize(getSize0());
                 return true;
@@ -923,9 +936,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Moves: MOVE, MOVEA, MOVEQ
+     * Moves: MOVE, MOVEA, MOVEQ, MOVEtoCCR, MOVEtoSR
      */
     const auto tryParseMoveOpcodes = [&]() -> tl::expected<bool, TError> {
+        // MOVE/MOVEA
         if (applyMask(0b1100'0000'0000'0000) == 0b0000'0000'0000'0000) {
             std::optional<ESize> size;
             switch (getBits(12, 2)) {
@@ -943,9 +957,16 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
                 return true;
             }
         }
+        // MOVEQ
         if (applyMask(0b1111'0001'0000'0000) == 0b0111'0000'0000'0000) {
             auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
             inst.SetKind(MoveqKind).SetData(getBits(0, 8)).SetDst(dst);
+            return true;
+        }
+        // MOVEtoCCR/MOVEtoSR
+        if (applyMask(0b1111'1101'1100'0000) == 0b0100'0100'1100'0000) {
+            PARSE_TARGET_WITH_SIZE_SAFE(Word);
+            inst.SetKind(getBit(9) ? MoveToSrKind : MoveToCcrKind).SetSrc(*dst);
             return true;
         }
         return false;

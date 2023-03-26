@@ -39,6 +39,8 @@ public:
         LslKind,        // LSL
         LsrKind,        // LSR
         MoveKind,       // MOVE
+        MoveToCcrKind,  // MOVEtoCCR
+        MoveToSrKind,   // MOVEtoSR
         MoveaKind,      // MOVEA
         MoveqKind,      // MOVEQ
         NegKind,        // NEG
