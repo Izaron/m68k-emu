@@ -174,6 +174,16 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
     const auto name = init;                         \
     if (!name) { return name.error(); }
 
+    const auto pushOnStack = [&](TLong value) -> std::optional<TError> {
+        // reserve memory on the stack
+        auto& sp = ctx.Registers.GetStackPointer();
+        sp -= 4;
+
+        // save the value
+        SAFE_CALL(ctx.Memory.WriteLong(sp, value));
+        return std::nullopt;
+    };
+
     const auto displaceProgramCounter = [&]() {
         auto& pc = ctx.Registers.PC;
         if (Size_ == Byte) {
@@ -484,23 +494,20 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case BsrKind: {
-            // reserve memory on the stack
-            auto& sp = ctx.Registers.GetStackPointer();
-            sp -= 4;
-
-            // dump the current program counter
-            SAFE_CALL(ctx.Memory.WriteLong(sp, ctx.Registers.PC));
-
-            // change the program counter
+            pushOnStack(ctx.Registers.PC);
             displaceProgramCounter();
-
             if (ctx.Registers.PC & 1) {
                 return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
             }
             break;
         }
-        case JmpKind: {
+        case JmpKind:
+        case JsrKind: {
+            TLong oldPc = ctx.Registers.PC;
             ctx.Registers.PC = Dst_.GetEffectiveAddress(ctx);
+            if (Kind_ == JsrKind) {
+                pushOnStack(oldPc);
+            }
             if (ctx.Registers.PC & 1) {
                 return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
             }
