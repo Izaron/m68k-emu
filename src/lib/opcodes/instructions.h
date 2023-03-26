@@ -28,6 +28,8 @@ public:
         BsrKind,        // BSR
         BtstKind,       // BTST
         ClrKind,        // CLR
+        EorKind,        // EOR
+        EoriKind,       // EORI
         LslKind,        // LSL
         LsrKind,        // LSR
         NegKind,        // NEG

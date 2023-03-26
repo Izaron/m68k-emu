@@ -12,6 +12,7 @@ namespace {
 enum EOpcodeType {
     AddType,
     AndType,
+    EorType,
 };
 
 EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
@@ -21,6 +22,9 @@ EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
     if (kind >= TInstruction::AndKind && kind <= TInstruction::AndiToSrKind) {
         return AndType;
     }
+    if (kind >= TInstruction::EorKind && kind <= TInstruction::EoriKind) {
+        return EorType;
+    }
     __builtin_unreachable();
 }
 
@@ -28,6 +32,7 @@ auto DoBinaryOp(EOpcodeType type, auto lhs, auto rhs) {
     switch (type) {
         case AddType: return lhs + rhs;
         case AndType: return lhs & rhs;
+        case EorType: return lhs ^ rhs;
         default: __builtin_unreachable();
     }
 }
@@ -209,7 +214,9 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case AddKind:
         case AddiKind:
         case AndKind:
-        case AndiKind: {
+        case AndiKind:
+        case EorKind:
+        case EoriKind: {
             const auto type = GetOpcodeType(Kind_);
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
@@ -222,8 +229,13 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
-            ctx.Registers.SetCarryFlag(carry);
+            if (type == AddType) {
+                ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
+                ctx.Registers.SetCarryFlag(carry);
+            } else {
+                ctx.Registers.SetOverflowFlag(0);
+                ctx.Registers.SetCarryFlag(0);
+            }
             break;
         }
         case AddaKind: {
@@ -705,9 +717,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
      */
     const auto tryParseImmediateOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 2> cases{
-            std::make_tuple(AndiKind, 1),
+        constexpr std::array<TCase, 3> cases{
             std::make_tuple(AddiKind, 3),
+            std::make_tuple(AndiKind, 1),
+            std::make_tuple(EoriKind, 5),
         };
 
         for (auto [kind, index] : cases) {
@@ -725,13 +738,14 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Binary operations: ADD, AND
+     * Binary operations: ADD, AND, EOR
      */
     const auto tryParseBinaryOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 2> cases{
-            std::make_tuple(AndKind, 4),
+        constexpr std::array<TCase, 3> cases{
             std::make_tuple(AddKind, 5),
+            std::make_tuple(AndKind, 4),
+            std::make_tuple(EorKind, 3),
         };
 
         for (auto [kind, index] : cases) {
