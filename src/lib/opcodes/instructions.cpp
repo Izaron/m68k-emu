@@ -389,9 +389,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case AslKind:
         case AsrKind:
         case LslKind:
-        case LsrKind: {
+        case LsrKind:
+        case RolKind:
+        case RorKind: {
             const bool isArithmetic = Kind_ == AslKind || Kind_ == AsrKind;
-            const bool isLeft = Kind_ == AslKind || Kind_ == LslKind;
+            const bool isRotate = Kind_ == RolKind || Kind_ == RorKind;
+            const bool isLeft = Kind_ == AslKind || Kind_ == LslKind || Kind_ == RolKind;
 
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
 
@@ -411,6 +414,9 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 if (isLeft) {
                     lastBitShifted = GetMsb(result, Size_);
                     result <<= 1;
+                    if (isRotate) {
+                        result |= lastBitShifted;
+                    }
                 } else {
                     if (i >= BitCount(Size_)) {
                         lastBitShifted = 0;
@@ -443,7 +449,9 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             if (rotation == 0) {
                 ctx.Registers.SetCarryFlag(0);
             } else {
-                ctx.Registers.SetExtendFlag(lastBitShifted);
+                if (!isRotate) {
+                    ctx.Registers.SetExtendFlag(lastBitShifted);
+                }
                 ctx.Registers.SetCarryFlag(lastBitShifted);
             }
             break;
@@ -827,13 +835,14 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Bit shift operations: ASL, ASR
+     * Bit shift operations: ASL, ASR, LSL, LSR, ROL, ROR, ROXL, ROXR
      */
     const auto tryParseShiftOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, EKind, int>;
-        constexpr std::array<TCase, 2> cases{
+        constexpr std::array<TCase, 3> cases{
             std::make_tuple(AslKind, AsrKind, 0),
             std::make_tuple(LslKind, LsrKind, 1),
+            std::make_tuple(RolKind, RorKind, 3),
         };
 
         for (auto [leftKind, rightKind, index] : cases) {
