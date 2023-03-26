@@ -418,7 +418,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                         result |= lastBitShifted;
                     }
                 } else {
-                    if (i >= BitCount(Size_)) {
+                    if (i >= BitCount(Size_) && !isRotate) {
                         lastBitShifted = 0;
                     } else {
                         lastBitShifted = result & 1;
@@ -428,6 +428,9 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                         result = (result >> 1) | (result & (1LL << (BitCount(Size_) - 1)));
                     } else {
                         result >>= 1;
+                        if (isRotate && lastBitShifted) {
+                            result |= 1LL << (BitCount(Size_) - 1);
+                        }
                     }
                 }
                 bool newMsb = GetMsb(result, Size_);
