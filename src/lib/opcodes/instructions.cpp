@@ -622,6 +622,29 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     TInstruction inst;
 
     /*
+     * Status register opcodes: [ANDI]to[CCR|SR]
+     */
+    const auto tryParseStatusRegisterOpcodes = [&]() -> tl::expected<bool, TError> {
+        using TCase = std::tuple<EKind, EKind, int>;
+        constexpr std::array<TCase, 1> cases{
+            std::make_tuple(AndiToCcrKind, AndiToSrKind, 1),
+        };
+        for (auto [ccrKind, srKind, index] : cases) {
+            if (applyMask(0b1111'0001'1011'1111) == 0b0000'0000'0011'1100 && getBits(9, 3) == index) {
+                bool isWord = getBit(6);
+
+                auto& pc = ctx.Registers.PC;
+                auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + (isWord ? 0 : 1));
+                pc += 2;
+
+                inst.SetKind(isWord ? srKind : ccrKind).SetSrc(src);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    /*
      * Bit manipulation opcodes: BTST, BCHG, BCLR, BSET
      */
     const auto tryParseBitOpcodes = [&]() -> tl::expected<bool, TError> {
@@ -767,18 +790,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
-    else if (*word == 0b0000'0010'0011'1100) {
-        auto& pc = ctx.Registers.PC;
-        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc + 1);
-        pc += 2;
-        inst.SetKind(AndiToCcrKind).SetSrc(src);
-    }
-    else if (*word == 0b0000'0010'0111'1100) {
-        auto& pc = ctx.Registers.PC;
-        auto src = TTarget{}.SetKind(TTarget::ImmediateKind).SetAddress(pc);
-        pc += 2;
-        inst.SetKind(AndiToSrKind).SetSrc(src);
-    }
     else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
         PARSE_TARGET_SAFE;
         inst.SetKind(AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
@@ -830,6 +841,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             if (*res) { return inst; }                          \
         }
 
+        TRY_PARSE_SAFE(tryParseStatusRegisterOpcodes);
         TRY_PARSE_SAFE(tryParseBitOpcodes);
         TRY_PARSE_SAFE(tryParseUnaryOpcodes);
         TRY_PARSE_SAFE(tryParseShiftOpcodes);
