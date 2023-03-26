@@ -9,6 +9,29 @@ static_assert(std::is_trivially_constructible_v<TInstruction>);
 
 namespace {
 
+enum EOpcodeType {
+    AddType,
+    AndType,
+};
+
+EOpcodeType GetOpcodeType(TInstruction::EKind kind) {
+    if (kind >= TInstruction::AddKind && kind <= TInstruction::AddxKind) {
+        return AddType;
+    }
+    if (kind >= TInstruction::AndKind && kind <= TInstruction::AndiToSrKind) {
+        return AndType;
+    }
+    __builtin_unreachable();
+}
+
+auto DoBinaryOp(EOpcodeType type, auto lhs, auto rhs) {
+    switch (type) {
+        case AddType: return lhs + rhs;
+        case AndType: return lhs & rhs;
+        default: __builtin_unreachable();
+    }
+}
+
 bool IsCarry(TLongLong value, TInstruction::ESize size) {
     switch (size) {
         case TInstruction::Byte: return value & (value ^ 0xFF);
@@ -184,14 +207,19 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case AddKind:
-        case AddiKind: {
+        case AddiKind:
+        case AndKind:
+        case AndiKind: {
+            const auto type = GetOpcodeType(Kind_);
             SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
-            const TLongLong result = *srcVal + *dstVal;
+            const TLongLong result = DoBinaryOp(type, *srcVal, *dstVal);
             SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
 
             const bool carry = IsCarry(result, Size_);
-            ctx.Registers.SetExtendFlag(carry);
+            if (type == AddType) {
+                ctx.Registers.SetExtendFlag(carry);
+            }
             ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
             ctx.Registers.SetZeroFlag(IsZero(result, Size_));
             ctx.Registers.SetOverflowFlag(IsOverflow(*srcVal, *dstVal, result, Size_));
@@ -242,19 +270,6 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             if (!IsZero(result, Size_)) {
                 ctx.Registers.SetZeroFlag(0);
             }
-            break;
-        }
-        case AndKind:
-        case AndiKind: {
-            SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
-            SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
-            const TLongLong result = *srcVal & *dstVal;
-            SAFE_CALL(Dst_.WriteSized(ctx, result, Size_));
-
-            ctx.Registers.SetNegativeFlag(GetMsb(result, Size_));
-            ctx.Registers.SetZeroFlag(IsZero(result, Size_));
-            ctx.Registers.SetOverflowFlag(0);
-            ctx.Registers.SetCarryFlag(0);
             break;
         }
         case AndiToCcrKind: {
@@ -709,6 +724,30 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
+    /*
+     * Binary operations: ADD, AND
+     */
+    const auto tryParseBinaryOpcodes = [&]() -> tl::expected<bool, TError> {
+        using TCase = std::tuple<EKind, int>;
+        constexpr std::array<TCase, 2> cases{
+            std::make_tuple(AndKind, 4),
+            std::make_tuple(AddKind, 5),
+        };
+
+        for (auto [kind, index] : cases) {
+            if (applyMask(0b1000'0000'0000'0000) == 0b1000'0000'0000'0000 && getBits(12, 3) == index) {
+                auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
+                PARSE_TARGET_SAFE;
+                if (!getBit(8)) {
+                    std::swap(src, *dst);
+                }
+                inst.SetKind(kind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
+                return true;
+            }
+        }
+        return false;
+    };
+
     if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
@@ -751,24 +790,6 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
         inst.SetKind(AddxKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
-    else if (applyMask(0b1111'0000'0000'0000) == 0b1100'0000'0000'0000) {
-        auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-        PARSE_TARGET_SAFE;
-
-        if (!getBit(8)) {
-            std::swap(src, *dst);
-        }
-        inst.SetKind(AndKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
-    }
-    else if (applyMask(0b1111'0000'0000'0000) == 0b1101'0000'0000'0000) {
-        auto src = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(9, 3));
-        PARSE_TARGET_SAFE;
-
-        if (!getBit(8)) {
-            std::swap(src, *dst);
-        }
-        inst.SetKind(AddKind).SetSrc(src).SetDst(*dst).SetSize(getSize0());
-    }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0110'0000'0000'0000) {
         const auto cond = static_cast<ECondition>(getBits(8, 4));
 
@@ -789,17 +810,18 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else {
 
-#define TRY_PARSE(func)                                         \
+#define TRY_PARSE_SAFE(func)                                    \
         {                                                       \
             auto res = func();                                  \
             if (!res) { return tl::unexpected(res.error()); }   \
             if (*res) { return inst; }                          \
         }
 
-        TRY_PARSE(tryParseBitOpcodes);
-        TRY_PARSE(tryParseUnaryOpcodes);
-        TRY_PARSE(tryParseShiftOpcodes);
-        TRY_PARSE(tryParseImmediateOpcodes);
+        TRY_PARSE_SAFE(tryParseBitOpcodes);
+        TRY_PARSE_SAFE(tryParseUnaryOpcodes);
+        TRY_PARSE_SAFE(tryParseShiftOpcodes);
+        TRY_PARSE_SAFE(tryParseImmediateOpcodes);
+        TRY_PARSE_SAFE(tryParseBinaryOpcodes);
 
         return tl::unexpected<TError>(TError::UnknownOpcode, "Unknown opcode %#04x", *word);
     }

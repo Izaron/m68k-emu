@@ -263,7 +263,7 @@ int main() {
         return lhs.size() < rhs.size();
     });
 
-    int from = 10;
+    int from = 2;
     int to = 14;
 
     int num = 0;
