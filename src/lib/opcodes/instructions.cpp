@@ -373,6 +373,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SR = *srcVal & 0b1010'1111'1111'1111;
             break;
         }
+        case MoveFromSrKind: {
+            SAFE_CALL(Dst_.WriteWord(ctx, ctx.Registers.SR));
+            break;
+        }
         case AslKind:
         case AsrKind:
         case LslKind:
@@ -936,7 +940,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Moves: MOVE, MOVEA, MOVEQ, MOVEtoCCR, MOVEtoSR
+     * Moves: MOVE, MOVEA, MOVEQ, MOVEtoCCR, MOVEtoSR, MOVEfromSR
      */
     const auto tryParseMoveOpcodes = [&]() -> tl::expected<bool, TError> {
         // MOVE/MOVEA
@@ -967,6 +971,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (applyMask(0b1111'1101'1100'0000) == 0b0100'0100'1100'0000) {
             PARSE_TARGET_WITH_SIZE_SAFE(Word);
             inst.SetKind(getBit(9) ? MoveToSrKind : MoveToCcrKind).SetSrc(*dst);
+            return true;
+        }
+        // MOVEfromSR
+        if (applyMask(0b1111'1111'1100'0000) == 0b0100'0000'1100'0000) {
+            PARSE_TARGET_WITH_SIZE_SAFE(Word);
+            inst.SetKind(MoveFromSrKind).SetDst(*dst);
             return true;
         }
         return false;

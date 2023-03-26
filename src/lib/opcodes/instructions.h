@@ -38,6 +38,7 @@ public:
         EoriToSrKind,   // EORItoSR
         LslKind,        // LSL
         LsrKind,        // LSR
+        MoveFromSrKind, // MOVEfromSR
         MoveKind,       // MOVE
         MoveToCcrKind,  // MOVEtoCCR
         MoveToSrKind,   // MOVEtoSR
