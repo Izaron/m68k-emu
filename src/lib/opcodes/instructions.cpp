@@ -282,7 +282,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case AddaKind:
+        case CmpaKind:
         case SubaKind: {
+            const auto type = GetOpcodeType(Kind_);
+
             TLongLong src;
             if (Size_ == Word) {
                 SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
@@ -292,8 +295,17 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 src = *srcVal;
             }
             SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
-            const TLongLong result = DoBinaryOp(GetOpcodeType(Kind_), src, *dstVal);
-            SAFE_CALL(Dst_.WriteSized(ctx, result, Long));
+            const TLongLong result = DoBinaryOp(type, src, *dstVal);
+
+            if (type == CmpType) {
+                const bool carry = IsCarry(result ^ src, Long);
+                ctx.Registers.SetNegativeFlag(GetMsb(result, Long));
+                ctx.Registers.SetZeroFlag(IsZero(result, Long));
+                ctx.Registers.SetOverflowFlag(IsOverflow(src, *dstVal, result, Long, type));
+                ctx.Registers.SetCarryFlag(carry);
+            } else {
+                SAFE_CALL(Dst_.WriteSized(ctx, result, Long));
+            }
             break;
         }
         case AddqKind:
@@ -843,8 +855,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
      */
     const auto tryParseBinaryOnAddressOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, int>;
-        constexpr std::array<TCase, 2> cases{
+        constexpr std::array<TCase, 3> cases{
             std::make_tuple(SubaKind, 0),
+            std::make_tuple(CmpaKind, 1),
             std::make_tuple(AddaKind, 2),
         };
 
@@ -899,7 +912,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
         }
     }
-    else if (applyMask(0b1111'0001'0011'1000) == 0b1011'0001'0000'1000) {
+    else if (applyMask(0b1111'0001'0011'1000) == 0b1011'0001'0000'1000 && getBits(6, 2) != 3) {
         const auto size = getSize0();
         auto src = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(0, 3)).SetSize(size);
         auto dst = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(9, 3)).SetSize(size);
