@@ -425,7 +425,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                         ctx.Registers.SetCarryFlag(lastBitShifted);
                     }
                 } else {
-                    if (i >= BitCount(Size_) && !isRotate) {
+                    if (i >= BitCount(Size_) && isArithmetic) {
                         lastBitShifted = 0;
                     } else {
                         lastBitShifted = result & 1;
@@ -435,8 +435,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                         result = (result >> 1) | (result & (1LL << (BitCount(Size_) - 1)));
                     } else {
                         result >>= 1;
-                        if (isRotate && lastBitShifted) {
-                            result |= 1LL << (BitCount(Size_) - 1);
+                        if (isRotate) {
+                            result |= static_cast<TLongLong>(lastBitShifted) << (BitCount(Size_) - 1);
+                        }
+                        if (isExtendRotate) {
+                            result |= static_cast<TLongLong>(ctx.Registers.GetExtendFlag()) << (BitCount(Size_) - 1);
+                            ctx.Registers.SetExtendFlag(lastBitShifted);
                         }
                     }
                 }
