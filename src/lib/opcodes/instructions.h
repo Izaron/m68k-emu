@@ -56,6 +56,8 @@ public:
         OriToSrKind,        // ORItoSR
         RolKind,            // ROL
         RorKind,            // ROR
+        RoxlKind,           // ROXL
+        RoxrKind,           // ROXR
         SubKind,            // SUB
         SubaKind,           // SUBA
         SubiKind,           // SUBI

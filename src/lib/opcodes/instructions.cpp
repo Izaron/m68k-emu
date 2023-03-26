@@ -391,10 +391,13 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case LslKind:
         case LsrKind:
         case RolKind:
-        case RorKind: {
+        case RorKind:
+        case RoxlKind:
+        case RoxrKind: {
             const bool isArithmetic = Kind_ == AslKind || Kind_ == AsrKind;
             const bool isRotate = Kind_ == RolKind || Kind_ == RorKind;
-            const bool isLeft = Kind_ == AslKind || Kind_ == LslKind || Kind_ == RolKind;
+            const bool isExtendRotate = Kind_ == RoxlKind || Kind_ == RoxrKind;
+            const bool isLeft = Kind_ == AslKind || Kind_ == LslKind || Kind_ == RolKind || Kind_ == RoxlKind;
 
             SAFE_DECLARE(dstVal, Dst_.ReadAsLongLong(ctx, Size_));
 
@@ -416,6 +419,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                     result <<= 1;
                     if (isRotate) {
                         result |= lastBitShifted;
+                    } else if (isExtendRotate) {
+                        result |= ctx.Registers.GetExtendFlag();
+                        ctx.Registers.SetExtendFlag(lastBitShifted);
+                        ctx.Registers.SetCarryFlag(lastBitShifted);
                     }
                 } else {
                     if (i >= BitCount(Size_) && !isRotate) {
@@ -451,8 +458,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             if (rotation == 0) {
                 ctx.Registers.SetCarryFlag(0);
+                if (isExtendRotate) {
+                    ctx.Registers.SetCarryFlag(ctx.Registers.GetExtendFlag());
+                }
             } else {
-                if (!isRotate) {
+                if (!isRotate && !isExtendRotate) {
                     ctx.Registers.SetExtendFlag(lastBitShifted);
                 }
                 ctx.Registers.SetCarryFlag(lastBitShifted);
@@ -842,9 +852,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
      */
     const auto tryParseShiftOpcodes = [&]() -> tl::expected<bool, TError> {
         using TCase = std::tuple<EKind, EKind, int>;
-        constexpr std::array<TCase, 3> cases{
+        constexpr std::array<TCase, 4> cases{
             std::make_tuple(AslKind, AsrKind, 0),
             std::make_tuple(LslKind, LsrKind, 1),
+            std::make_tuple(RoxlKind, RoxrKind, 2),
             std::make_tuple(RolKind, RorKind, 3),
         };
 
