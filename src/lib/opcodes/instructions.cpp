@@ -811,13 +811,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
-    else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0000'0000'0000) {
+    else if (applyMask(0b1111'0000'0000'0000) == 0b0101'0000'0000'0000) {
         PARSE_TARGET_SAFE;
-        inst.SetKind(AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
-    }
-    else if (applyMask(0b1111'0001'0000'0000) == 0b0101'0001'0000'0000) {
-        PARSE_TARGET_SAFE;
-        inst.SetKind(SubqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
+        inst.SetKind(getBit(8) ? SubqKind : AddqKind).SetData(getBits(9, 3)).SetDst(*dst).SetSize(getSize0());
     }
     else if (applyMask(0b1111'0001'1111'0000) == 0b1100'0001'0000'0000) {
         const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
@@ -825,33 +821,19 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(1);
         inst.SetKind(AbcdKind).SetSrc(src).SetDst(dst);
     }
-    else if (applyMask(0b1111'0000'1100'0000) == 0b1101'0000'1100'0000) {
+    else if (applyMask(0b1011'0000'1100'0000) == 0b1001'0000'1100'0000) {
         const auto size = getBit(8) ? Long : Word;
         auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
         PARSE_TARGET_WITH_SIZE_SAFE(size);
         std::swap(src, *dst);
-        inst.SetKind(AddaKind).SetSrc(src).SetDst(*dst).SetSize(size);
+        inst.SetKind(getBit(14) ? AddaKind : SubaKind).SetSrc(src).SetDst(*dst).SetSize(size);
     }
-    else if (applyMask(0b1111'0000'1100'0000) == 0b1001'0000'1100'0000) {
-        const auto size = getBit(8) ? Long : Word;
-        auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
-        PARSE_TARGET_WITH_SIZE_SAFE(size);
-        std::swap(src, *dst);
-        inst.SetKind(SubaKind).SetSrc(src).SetDst(*dst).SetSize(size);
-    }
-    else if (applyMask(0b1111'0001'0011'0000) == 0b1101'0001'0000'0000) {
+    else if (applyMask(0b1011'0001'0011'0000) == 0b1001'0001'0000'0000) {
         const auto size = getSize0();
         const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
         auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
         auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
-        inst.SetKind(AddxKind).SetSrc(src).SetDst(dst).SetSize(size);
-    }
-    else if (applyMask(0b1111'0001'0011'0000) == 0b1001'0001'0000'0000) {
-        const auto size = getSize0();
-        const auto kind = getBit(3) ? TTarget::AddressDecrementKind : TTarget::DataRegisterKind;
-        auto src = TTarget{}.SetKind(kind).SetIndex(getBits(0, 3)).SetSize(size);
-        auto dst = TTarget{}.SetKind(kind).SetIndex(getBits(9, 3)).SetSize(size);
-        inst.SetKind(SubxKind).SetSrc(src).SetDst(dst).SetSize(size);
+        inst.SetKind(getBit(14) ? AddxKind : SubxKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0110'0000'0000'0000) {
         const auto cond = static_cast<ECondition>(getBits(8, 4));
