@@ -513,6 +513,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
+        case LeaKind: {
+            SAFE_CALL(Dst_.WriteLong(ctx, Src_.GetEffectiveAddress(ctx)));
+            break;
+        }
         case BchgKind:
         case BclrKind:
         case BsetKind:
@@ -1086,6 +1090,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         PARSE_TARGET_WITH_SIZE_SAFE(Long);
         const auto kind = getBit(6) ? JmpKind : JsrKind;
         inst.SetKind(kind).SetDst(*dst);
+    }
+    else if (applyMask(0b1111'0001'1100'0000) == 0b0100'0001'1100'0000) {
+        PARSE_TARGET_WITH_SIZE_SAFE(Long);
+        auto src = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(9, 3));
+        std::swap(src, *dst);
+        inst.SetKind(LeaKind).SetSrc(src).SetDst(*dst);
     }
     else if (applyMask(0b1111'0001'0011'1000) == 0b1011'0001'0000'1000 && getBits(6, 2) != 3) {
         const auto size = getSize0();
