@@ -38,7 +38,8 @@ public:
         EoriToSrKind,   // EORItoSR
         LslKind,        // LSL
         LsrKind,        // LSR
-        MoveKind,       // MOVE (,MOVEA?)
+        MoveKind,       // MOVE
+        MoveaKind,      // MOVEA
         NegKind,        // NEG
         NegxKind,       // NEGX
         NopKind,        // NOP

@@ -551,6 +551,25 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
+        case MoveaKind: {
+            auto tmp = ctx.Registers.PC;
+            ctx.Registers.PC = Data_;
+
+            TLongLong src;
+            if (Size_ == Word) {
+                SAFE_DECLARE(srcVal, Src_.ReadWord(ctx));
+                src = static_cast<TSignedLongLong>(static_cast<TSignedWord>(*srcVal));
+            } else {
+                SAFE_DECLARE(srcVal, Src_.ReadLong(ctx));
+                src = *srcVal;
+            }
+
+            tryIncAddressSrc();
+            ctx.Registers.PC = tmp;
+
+            SAFE_CALL(Dst_.WriteLong(ctx, src));
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -900,16 +919,17 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (applyMask(0b1100'0000'0000'0000) == 0b0000'0000'0000'0000) {
             std::optional<ESize> size;
             switch (getBits(12, 2)) {
-                case 1: size = Byte; break;
-                case 3: size = Word; break;
-                case 2: size = Long; break;
+                case 0b01: size = Byte; break;
+                case 0b11: size = Word; break;
+                case 0b10: size = Long; break;
                 default: break;
             }
             if (size) {
                 PARSE_TARGET_WITH_ARGS_SAFE(src, *size, 3, 0);
                 TLong pc = ctx.Registers.PC; // remember current program counter
                 PARSE_TARGET_WITH_ARGS_SAFE(dst, *size, 6, 9);
-                inst.SetKind(MoveKind).SetSrc(*src).SetDst(*dst).SetSize(*size).SetData(pc);
+                const auto kind = getBits(6, 3) == 1 ? MoveaKind : MoveKind;
+                inst.SetKind(kind).SetSrc(*src).SetDst(*dst).SetSize(*size).SetData(pc);
                 return true;
             }
         }
