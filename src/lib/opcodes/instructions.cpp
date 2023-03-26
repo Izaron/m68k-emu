@@ -377,6 +377,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteWord(ctx, ctx.Registers.SR));
             break;
         }
+        case MoveFromUspKind: {
+            SAFE_CALL(Dst_.WriteLong(ctx, ctx.Registers.USP));
+            break;
+        }
         case AslKind:
         case AsrKind:
         case LslKind:
@@ -940,7 +944,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Moves: MOVE, MOVEA, MOVEQ, MOVEtoCCR, MOVEtoSR, MOVEfromSR
+     * Moves: MOVE, MOVEA, MOVEQ, MOVEtoCCR, MOVE[to|from][SR|USP]
      */
     const auto tryParseMoveOpcodes = [&]() -> tl::expected<bool, TError> {
         // MOVE/MOVEA
@@ -977,6 +981,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         if (applyMask(0b1111'1111'1100'0000) == 0b0100'0000'1100'0000) {
             PARSE_TARGET_WITH_SIZE_SAFE(Word);
             inst.SetKind(MoveFromSrKind).SetDst(*dst);
+            return true;
+        }
+        // MOVEfromUSP
+        if (applyMask(0b1111'1111'1111'1000) == 0b0100'1110'0110'1000) {
+            auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(0, 3));
+            inst.SetKind(MoveFromUspKind).SetDst(dst);
             return true;
         }
         return false;
