@@ -499,6 +499,13 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
+        case JmpKind: {
+            ctx.Registers.PC = Dst_.GetEffectiveAddress(ctx);
+            if (ctx.Registers.PC & 1) {
+                return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
+            }
+            break;
+        }
         case BchgKind:
         case BclrKind:
         case BsetKind:
@@ -1067,6 +1074,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         } else {
             inst.SetKind(BccKind).SetCondition(cond).SetData(displacement).SetSize(size);
         }
+    }
+    else if (applyMask(0b1111'1111'1000'0000) == 0b0100'1110'1000'0000) {
+        PARSE_TARGET_WITH_SIZE_SAFE(Long);
+        const auto kind = getBit(6) ? JmpKind : JsrKind;
+        inst.SetKind(kind).SetDst(*dst);
     }
     else if (applyMask(0b1111'0001'0011'1000) == 0b1011'0001'0000'1000 && getBits(6, 2) != 3) {
         const auto size = getSize0();

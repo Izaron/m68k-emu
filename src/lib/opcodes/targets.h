@@ -33,6 +33,7 @@ public:
     void TryIncrementAddress(NEmulator::TContext ctx);
 
     // helper methods
+    TLong GetEffectiveAddress(NEmulator::TContext ctx) const;
     EKind GetKind() const { return Kind_; }
     uint8_t GetIndex() const { return Index_; }
 
@@ -51,7 +52,7 @@ public:
     [[nodiscard]] std::optional<TError> WriteLong(NEmulator::TContext ctx, TLong l);
 
 private:
-    TLong GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress);
+    TLong GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress) const;
 
 private:
     EKind Kind_;

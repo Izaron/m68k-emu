@@ -91,6 +91,31 @@ void TTarget::TryIncrementAddress(NEmulator::TContext ctx) {
     }
 }
 
+TLong TTarget::GetEffectiveAddress(NEmulator::TContext ctx) const {
+    switch (Kind_) {
+        case AddressKind:
+        case AddressIncrementKind:
+        case AddressDecrementKind:
+            return GetAReg(ctx.Registers, Index_);
+        case AddressDisplacementKind:
+            return GetAReg(ctx.Registers, Index_) + static_cast<TSignedWord>(ExtWord0_);
+        case AddressIndexKind:
+            return GetIndexedAddress(ctx, GetAReg(ctx.Registers, Index_));
+        case ProgramCounterDisplacementKind:
+            return ctx.Registers.PC - 2 + static_cast<TSignedWord>(ExtWord0_);
+        case ProgramCounterIndexKind:
+            return GetIndexedAddress(ctx, ctx.Registers.PC - 2);
+        case AbsoluteShortKind:
+            return static_cast<TSignedWord>(ExtWord0_);
+        case AbsoluteLongKind:
+            return (ExtWord0_ << 16) + ExtWord1_;
+        case ImmediateKind:
+            return Address_;
+        default:
+            __builtin_unreachable();
+    }
+}
+
 tl::expected<TDataHolder, TError> TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
     TryDecrementAddress(ctx);
 
@@ -106,10 +131,6 @@ tl::expected<TDataHolder, TError> TTarget::Read(NEmulator::TContext ctx, TAddres
 
     TDataHolder data;
 
-#define GET_DATA_SAFE \
-    if (!dataOrError) { return tl::unexpected(dataOrError.error()); } \
-    data = std::move(*dataOrError)
-
     switch (Kind_) {
         case DataRegisterKind: {
             data = readRegister(ctx.Registers.D[Index_]);
@@ -119,50 +140,19 @@ tl::expected<TDataHolder, TError> TTarget::Read(NEmulator::TContext ctx, TAddres
             data = readRegister(GetAReg(ctx.Registers, Index_));
             break;
         }
-        case AddressKind:
+        case AbsoluteLongKind:
+        case AbsoluteShortKind:
+        case AddressDecrementKind:
+        case AddressDisplacementKind:
         case AddressIncrementKind:
-        case AddressDecrementKind: {
-            const auto reg = GetAReg(ctx.Registers, Index_);
-            auto dataOrError = ctx.Memory.Read(reg, size);
-            GET_DATA_SAFE;
-            break;
-        }
-        case AddressDisplacementKind: {
-            const auto reg = GetAReg(ctx.Registers, Index_);
-            auto dataOrError = ctx.Memory.Read(reg + static_cast<TSignedWord>(ExtWord0_), size);
-            GET_DATA_SAFE;
-            break;
-        }
-        case AddressIndexKind: {
-            const TLong addr = GetIndexedAddress(ctx, GetAReg(ctx.Registers, Index_));
-            auto dataOrError = ctx.Memory.Read(addr, size);
-            GET_DATA_SAFE;
-            break;
-        }
-        case ProgramCounterDisplacementKind: {
-            auto dataOrError = ctx.Memory.Read(ctx.Registers.PC - 2 + static_cast<TSignedWord>(ExtWord0_), size);
-            GET_DATA_SAFE;
-            break;
-        }
+        case AddressIndexKind:
+        case AddressKind:
+        case ImmediateKind:
+        case ProgramCounterDisplacementKind:
         case ProgramCounterIndexKind: {
-            const TLong addr = GetIndexedAddress(ctx, ctx.Registers.PC - 2);
-            auto dataOrError = ctx.Memory.Read(addr, size);
-            GET_DATA_SAFE;
-            break;
-        }
-        case AbsoluteShortKind: {
-            auto dataOrError = ctx.Memory.Read(static_cast<TSignedWord>(ExtWord0_), size);
-            GET_DATA_SAFE;
-            break;
-        }
-        case AbsoluteLongKind: {
-            auto dataOrError = ctx.Memory.Read((ExtWord0_ << 16) + ExtWord1_, size);
-            GET_DATA_SAFE;
-            break;
-        }
-        case ImmediateKind: {
-            auto dataOrError = ctx.Memory.Read(Address_, size);
-            GET_DATA_SAFE;
+            auto dataOrError = ctx.Memory.Read(GetEffectiveAddress(ctx), size);
+            if (!dataOrError) { return tl::unexpected(dataOrError.error()); }
+            data = std::move(*dataOrError);
             break;
         }
     }
@@ -302,7 +292,7 @@ std::optional<TError> TTarget::WriteLong(NEmulator::TContext ctx, TLong l) {
     return Write(ctx, data);
 }
 
-TLong TTarget::GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress) {
+TLong TTarget::GetIndexedAddress(NEmulator::TContext ctx, TLong baseAddress) const {
     const uint8_t xregNum = GetBits(ExtWord0_, 12, 3);
     const TLong xreg = GetBit(ExtWord0_, 15) ? GetAReg(ctx.Registers, xregNum) : ctx.Registers.D[xregNum];
     const TLong size = GetBit(ExtWord0_, 11) ? /*Long*/ 4 : /*Word*/ 2;

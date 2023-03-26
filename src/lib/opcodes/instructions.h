@@ -36,6 +36,8 @@ public:
         EoriKind,           // EORI
         EoriToCcrKind,      // EORItoCCR
         EoriToSrKind,       // EORItoSR
+        JmpKind,            // JMP
+        JsrKind,            // JSR
         LslKind,            // LSL
         LsrKind,            // LSR
         MoveFromSrKind,     // MOVEfromSR
