@@ -701,7 +701,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
-        case NopKind: {
+        case NopKind:
+        case ResetKind: {
             break;
         }
     }
@@ -1100,7 +1101,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         return false;
     };
 
-    if (*word == 0b0100'1110'0111'0001) {
+    if (*word == 0b0100'1110'0111'0000) {
+        inst.SetKind(ResetKind);
+    }
+    else if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0101'0000'0000'0000) {

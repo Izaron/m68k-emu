@@ -57,6 +57,7 @@ public:
         OriKind,            // ORI
         OriToCcrKind,       // ORItoCCR
         OriToSrKind,        // ORItoSR
+        ResetKind,          // RESET
         RolKind,            // ROL
         RorKind,            // ROR
         RoxlKind,           // ROXL
