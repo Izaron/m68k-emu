@@ -649,7 +649,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
-        case TrapKind: {
+        case TrapKind:
+        case TrapvKind: {
+            if (Kind_ == TrapvKind && !ctx.Registers.GetOverflowFlag()) {
+                break;
+            }
+
             auto& m = ctx.Memory;
             auto& ssp = ctx.Registers.SSP;
             auto& pc = ctx.Registers.PC;
@@ -660,8 +665,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ssp -= 2;
             SAFE_CALL(m.WriteWord(ssp, ctx.Registers.SR));
 
-            constexpr int TRAP_VECTOR_OFFSET = 32;
-            SAFE_DECLARE(newPc, m.ReadLong((Data_ + TRAP_VECTOR_OFFSET) * 4));
+            SAFE_DECLARE(newPc, m.ReadLong(Data_ * 4));
             pc = *newPc;
             break;
         }
@@ -1120,7 +1124,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         inst.SetKind(CmpmKind).SetSrc(src).SetDst(dst).SetSize(size);
     }
     else if (applyMask(0b1111'1111'1111'0000) == 0b0100'1110'0100'0000) {
-        inst.SetKind(TrapKind).SetData(getBits(0, 4));
+        constexpr int TRAP_VECTOR_OFFSET = 32;
+        inst.SetKind(TrapKind).SetData(TRAP_VECTOR_OFFSET + getBits(0, 4));
+    }
+    else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0110) {
+        inst.SetKind(TrapvKind).SetData(7);
     }
     else {
 
