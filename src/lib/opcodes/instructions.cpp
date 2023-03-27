@@ -517,6 +517,10 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Dst_.WriteLong(ctx, Src_.GetEffectiveAddress(ctx)));
             break;
         }
+        case PeaKind: {
+            pushOnStack(Src_.GetEffectiveAddress(ctx));
+            break;
+        }
         case BchgKind:
         case BclrKind:
         case BsetKind:
@@ -1162,6 +1166,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     else if (applyMask(0b1111'1111'1111'1000) == 0b0100'1000'0100'0000) {
         auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
         inst.SetKind(SwapKind).SetDst(dst);
+    }
+    else if (applyMask(0b1111'1111'1100'0000) == 0b0100'1000'0100'0000) {
+        PARSE_TARGET_WITH_SIZE_SAFE(Long);
+        inst.SetKind(PeaKind).SetSrc(*dst);
     }
     else if (applyMask(0b1111'1111'1100'0000) == 0b0100'1010'1100'0000) {
         PARSE_TARGET_WITH_SIZE_SAFE(Byte);
