@@ -649,6 +649,19 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
+        case SwapKind: {
+            SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
+            TLong val = *dstVal;
+            TLong half = val & 0xFFFF;
+            val = (val >> 16) | (half << 16);
+            SAFE_CALL(Dst_.WriteLong(ctx, val));
+
+            ctx.Registers.SetNegativeFlag(GetMsb(val, Long));
+            ctx.Registers.SetZeroFlag(IsZero(val, Long));
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
         case TrapKind:
         case TrapvKind: {
             if (Kind_ == TrapvKind && !ctx.Registers.GetOverflowFlag()) {
@@ -1130,6 +1143,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(0, 3)).SetSize(size);
         auto dst = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(9, 3)).SetSize(size);
         inst.SetKind(CmpmKind).SetSrc(src).SetDst(dst).SetSize(size);
+    }
+    else if (applyMask(0b1111'1111'1111'1000) == 0b0100'1000'0100'0000) {
+        auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
+        inst.SetKind(SwapKind).SetDst(dst);
     }
     else if (applyMask(0b1111'1111'1111'0000) == 0b0100'1110'0100'0000) {
         constexpr int TRAP_VECTOR_OFFSET = 32;

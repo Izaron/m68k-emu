@@ -66,6 +66,7 @@ public:
         SubiKind,           // SUBI
         SubqKind,           // SUBQ
         SubxKind,           // SUBX
+        SwapKind,           // SWAP
         TrapKind,           // TRAP
         TrapvKind,          // TRAPV
         TstKind,            // TST
