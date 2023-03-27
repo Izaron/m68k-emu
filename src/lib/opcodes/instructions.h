@@ -68,6 +68,7 @@ public:
         SubxKind,           // SUBX
         TrapKind,           // TRAP
         TrapvKind,          // TRAPV
+        TstKind,            // TST
     };
 
     enum ESize : uint8_t {

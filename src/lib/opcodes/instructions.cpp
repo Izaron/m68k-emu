@@ -669,6 +669,14 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             pc = *newPc;
             break;
         }
+        case TstKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadAsLongLong(ctx, Size_));
+            ctx.Registers.SetNegativeFlag(GetMsb(*srcVal, Size_));
+            ctx.Registers.SetZeroFlag(IsZero(*srcVal, Size_));
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -1129,6 +1137,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0110) {
         inst.SetKind(TrapvKind).SetData(7);
+    }
+    else if (applyMask(0b1111'1111'0000'0000) == 0b0100'1010'0000'0000) {
+        PARSE_TARGET_SAFE;
+        inst.SetKind(TstKind).SetSrc(*dst).SetSize(getSize0());
     }
     else {
 
