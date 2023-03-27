@@ -280,6 +280,7 @@ int main() {
         if (index >= 75 && index <= 89) return true;
         if (index >= 92 && index <= 103) return true;
         if (index >= 109 && index <= 116) return true;
+        if (index >= 119 && index <= 119) return true;
         return false;
     };
 

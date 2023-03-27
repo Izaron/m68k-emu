@@ -649,6 +649,22 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
+        case TrapKind: {
+            auto& m = ctx.Memory;
+            auto& ssp = ctx.Registers.SSP;
+            auto& pc = ctx.Registers.PC;
+
+            ctx.Registers.SetSupervisorFlag(1);
+            ssp -= 4;
+            SAFE_CALL(m.WriteLong(ssp, pc));
+            ssp -= 2;
+            SAFE_CALL(m.WriteWord(ssp, ctx.Registers.SR));
+
+            constexpr int TRAP_VECTOR_OFFSET = 32;
+            SAFE_DECLARE(newPc, m.ReadLong((Data_ + TRAP_VECTOR_OFFSET) * 4));
+            pc = *newPc;
+            break;
+        }
         case NopKind: {
             break;
         }
@@ -1102,6 +1118,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
         auto src = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(0, 3)).SetSize(size);
         auto dst = TTarget{}.SetKind(TTarget::AddressIncrementKind).SetIndex(getBits(9, 3)).SetSize(size);
         inst.SetKind(CmpmKind).SetSrc(src).SetDst(dst).SetSize(size);
+    }
+    else if (applyMask(0b1111'1111'1111'0000) == 0b0100'1110'0100'0000) {
+        inst.SetKind(TrapKind).SetData(getBits(0, 4));
     }
     else {
 
