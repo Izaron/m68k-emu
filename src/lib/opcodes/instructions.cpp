@@ -174,13 +174,35 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
     const auto name = init;                         \
     if (!name) { return name.error(); }
 
-    const auto pushOnStack = [&](TLong value) -> std::optional<TError> {
-        // reserve memory on the stack
+    const auto pushStack = [&](auto value) -> std::optional<TError> {
         auto& sp = ctx.Registers.GetStackPointer();
-        sp -= 4;
+        auto& m = ctx.Memory;
 
-        // save the value
-        SAFE_CALL(ctx.Memory.WriteLong(sp, value));
+        // reserve memory on the stack and save the value
+        if constexpr (std::is_same_v<decltype(value), TLong>) {
+            sp -= 4;
+            SAFE_CALL(ctx.Memory.WriteLong(sp, value));
+        } else {
+            sp -= 2;
+            SAFE_CALL(ctx.Memory.WriteWord(sp, value));
+        }
+        return std::nullopt;
+    };
+
+    const auto popStack = [&](auto& value) -> std::optional<TError> {
+        auto& sp = ctx.Registers.GetStackPointer();
+        auto& m = ctx.Memory;
+
+        // dump the value and freememory on the stack
+        if constexpr (std::is_same_v<decltype(value), TLong>) {
+            SAFE_DECLARE(val, ctx.Memory.ReadLong(sp));
+            value = *val;
+            sp += 4;
+        } else {
+            SAFE_DECLARE(val, ctx.Memory.ReadWord(sp));
+            value = *val;
+            sp += 2;
+        }
         return std::nullopt;
     };
 
@@ -494,7 +516,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case BsrKind: {
-            pushOnStack(ctx.Registers.PC);
+            pushStack(ctx.Registers.PC);
             displaceProgramCounter();
             if (ctx.Registers.PC & 1) {
                 return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
@@ -506,7 +528,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             TLong oldPc = ctx.Registers.PC;
             ctx.Registers.PC = Dst_.GetEffectiveAddress(ctx);
             if (Kind_ == JsrKind) {
-                pushOnStack(oldPc);
+                pushStack(oldPc);
             }
             if (ctx.Registers.PC & 1) {
                 return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
@@ -518,7 +540,7 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case PeaKind: {
-            pushOnStack(Src_.GetEffectiveAddress(ctx));
+            pushStack(Src_.GetEffectiveAddress(ctx));
             break;
         }
         case BchgKind:
@@ -683,18 +705,12 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
                 break;
             }
 
-            auto& m = ctx.Memory;
-            auto& ssp = ctx.Registers.SSP;
-            auto& pc = ctx.Registers.PC;
-
             ctx.Registers.SetSupervisorFlag(1);
-            ssp -= 4;
-            SAFE_CALL(m.WriteLong(ssp, pc));
-            ssp -= 2;
-            SAFE_CALL(m.WriteWord(ssp, ctx.Registers.SR));
+            pushStack(ctx.Registers.PC);
+            pushStack(static_cast<TWord>(ctx.Registers.SR));
 
-            SAFE_DECLARE(newPc, m.ReadLong(Data_ * 4));
-            pc = *newPc;
+            SAFE_DECLARE(newPc, ctx.Memory.ReadLong(Data_ * 4));
+            ctx.Registers.PC = *newPc;
             break;
         }
         case TstKind: {
