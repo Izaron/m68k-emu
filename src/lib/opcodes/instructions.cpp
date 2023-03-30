@@ -193,8 +193,8 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         auto& sp = ctx.Registers.GetStackPointer();
         auto& m = ctx.Memory;
 
-        // dump the value and freememory on the stack
-        if constexpr (std::is_same_v<decltype(value), TLong>) {
+        // dump the value and free memory on the stack
+        if constexpr (std::is_same_v<decltype(value), TLong&>) {
             SAFE_DECLARE(val, ctx.Memory.ReadLong(sp));
             value = *val;
             sp += 4;
@@ -707,10 +707,21 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
             ctx.Registers.SetSupervisorFlag(1);
             pushStack(ctx.Registers.PC);
-            pushStack(static_cast<TWord>(ctx.Registers.SR));
+            pushStack(ctx.Registers.SR);
 
             SAFE_DECLARE(newPc, ctx.Memory.ReadLong(Data_ * 4));
             ctx.Registers.PC = *newPc;
+            break;
+        }
+        case RteKind: {
+            TWord newSr;
+            popStack(newSr);
+            popStack(ctx.Registers.PC);
+            // TODO: find out why bits 12 and 14 matter
+            ctx.Registers.SR = newSr & 0b1010'1111'1111'1111;
+            if (ctx.Registers.PC & 1) {
+                return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
+            }
             break;
         }
         case TstKind: {
@@ -1197,6 +1208,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0110) {
         inst.SetKind(TrapvKind).SetData(7);
+    }
+    else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0011) {
+        inst.SetKind(RteKind);
     }
     else if (applyMask(0b1111'1111'0000'0000) == 0b0100'1010'0000'0000) {
         PARSE_TARGET_SAFE;
