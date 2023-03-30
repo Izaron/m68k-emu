@@ -277,7 +277,7 @@ int main() {
         if (index >= 47 && index <= 64) return true;
         if (index >= 69 && index <= 71) return true;
         if (index >= 75 && index <= 106) return true;
-        if (index >= 108 && index <= 123) return true;
+        if (index >= 108) return true;
         return false;
     };
 

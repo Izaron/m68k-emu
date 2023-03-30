@@ -78,6 +78,7 @@ public:
         TrapKind,           // TRAP
         TrapvKind,          // TRAPV
         TstKind,            // TST
+        UnlinkKind,         // UNLINK
     };
 
     enum ESize : uint8_t {
