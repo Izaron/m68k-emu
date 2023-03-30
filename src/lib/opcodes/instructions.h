@@ -39,6 +39,7 @@ public:
         JmpKind,            // JMP
         JsrKind,            // JSR
         LeaKind,            // LEA
+        LinkKind,           // LINK
         LslKind,            // LSL
         LsrKind,            // LSR
         MoveFromSrKind,     // MOVEfromSR

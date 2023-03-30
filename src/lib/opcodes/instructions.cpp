@@ -707,6 +707,21 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
+        case LinkKind: {
+            SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
+            auto& sp = ctx.Registers.GetStackPointer();
+            if (Dst_.GetIndex() == 7) {
+                // a really dirty hack to work with "[LINK A7, #]"
+                pushStack(*dstVal - 4);
+            } else {
+                pushStack(*dstVal);
+            }
+
+            SAFE_CALL(Dst_.WriteLong(ctx, sp));
+            TSignedWord offset = Data_;
+            sp += offset;
+            break;
+        }
         case TrapKind:
         case TrapvKind: {
             if (Kind_ == TrapvKind && !ctx.Registers.GetOverflowFlag()) {
@@ -1224,6 +1239,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     else if (applyMask(0b1111'1111'1100'0000) == 0b0100'1010'1100'0000) {
         PARSE_TARGET_WITH_SIZE_SAFE(Byte);
         inst.SetKind(TasKind).SetDst(*dst);
+    }
+    else if (applyMask(0b1111'1111'1111'1000) == 0b0100'1110'0101'0000) {
+        auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(0, 3));
+        READ_WORD_SAFE;
+        inst.SetKind(LinkKind).SetDst(dst).SetData(*word).SetSize(Long);
     }
     else if (applyMask(0b1111'1111'1111'0000) == 0b0100'1110'0100'0000) {
         constexpr int TRAP_VECTOR_OFFSET = 32;
