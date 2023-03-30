@@ -714,15 +714,18 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             break;
         }
         case RteKind:
-        case RtrKind: {
+        case RtrKind:
+        case RtsKind: {
             TWord newSr;
-            popStack(newSr);
+            if (Kind_ != RtsKind) {
+                popStack(newSr);
+            }
             popStack(ctx.Registers.PC);
 
             if (Kind_ == RteKind) {
                 // TODO: find out why bits 12 and 14 matter
                 ctx.Registers.SR = newSr & 0b1010'1111'1111'1111;
-            } else {
+            } else if (Kind_ == RtrKind) {
                 ctx.Registers.SR = (ctx.Registers.SR & 0xFF00) | (newSr & 0x00FF);
             }
 
@@ -1218,6 +1221,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0011) {
         inst.SetKind(RteKind);
+    }
+    else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0101) {
+        inst.SetKind(RtsKind);
     }
     else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0111) {
         inst.SetKind(RtrKind);

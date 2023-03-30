@@ -65,6 +65,7 @@ public:
         RoxrKind,           // ROXR
         RteKind,            // RTE
         RtrKind,            // RTR
+        RtsKind,            // RTS
         SubKind,            // SUB
         SubaKind,           // SUBA
         SubiKind,           // SUBI
