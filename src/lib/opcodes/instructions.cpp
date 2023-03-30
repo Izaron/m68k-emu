@@ -707,6 +707,13 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.SetCarryFlag(0);
             break;
         }
+        case ExgKind: {
+            SAFE_DECLARE(srcVal, Src_.ReadLong(ctx));
+            SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
+            SAFE_CALL(Dst_.WriteLong(ctx, *srcVal));
+            SAFE_CALL(Src_.WriteLong(ctx, *dstVal));
+            break;
+        }
         case LinkKind: {
             SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
             auto& sp = ctx.Registers.GetStackPointer();
@@ -1247,6 +1254,23 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     else if (applyMask(0b1111'1111'1100'0000) == 0b0100'1010'1100'0000) {
         PARSE_TARGET_WITH_SIZE_SAFE(Byte);
         inst.SetKind(TasKind).SetDst(*dst);
+    }
+    else if (applyMask(0b1111'0001'0011'0000) == 0b1100'0001'0000'0000) {
+        auto src = TTarget{}.SetIndex(getBits(0, 3));
+        auto dst = TTarget{}.SetIndex(getBits(9, 3));
+        if (getBits(3, 5) == 0b01000) {
+            src.SetKind(TTarget::DataRegisterKind);
+            dst.SetKind(TTarget::DataRegisterKind);
+        }
+        else if (getBits(3, 5) == 0b01001) {
+            src.SetKind(TTarget::AddressRegisterKind);
+            dst.SetKind(TTarget::AddressRegisterKind);
+        }
+        else {
+            src.SetKind(TTarget::AddressRegisterKind);
+            dst.SetKind(TTarget::DataRegisterKind);
+        }
+        inst.SetKind(ExgKind).SetSrc(src).SetDst(dst);
     }
     else if (applyMask(0b1111'1111'1111'1000) == 0b0100'1110'0101'0000) {
         auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(0, 3));
