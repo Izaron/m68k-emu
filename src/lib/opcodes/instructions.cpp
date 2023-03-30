@@ -713,12 +713,19 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.PC = *newPc;
             break;
         }
-        case RteKind: {
+        case RteKind:
+        case RtrKind: {
             TWord newSr;
             popStack(newSr);
             popStack(ctx.Registers.PC);
-            // TODO: find out why bits 12 and 14 matter
-            ctx.Registers.SR = newSr & 0b1010'1111'1111'1111;
+
+            if (Kind_ == RteKind) {
+                // TODO: find out why bits 12 and 14 matter
+                ctx.Registers.SR = newSr & 0b1010'1111'1111'1111;
+            } else {
+                ctx.Registers.SR = (ctx.Registers.SR & 0xFF00) | (newSr & 0x00FF);
+            }
+
             if (ctx.Registers.PC & 1) {
                 return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
             }
@@ -1211,6 +1218,9 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0011) {
         inst.SetKind(RteKind);
+    }
+    else if (applyMask(0b1111'1111'1111'1111) == 0b0100'1110'0111'0111) {
+        inst.SetKind(RtrKind);
     }
     else if (applyMask(0b1111'1111'0000'0000) == 0b0100'1010'0000'0000) {
         PARSE_TARGET_SAFE;
