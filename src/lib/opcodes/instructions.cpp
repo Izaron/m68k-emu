@@ -515,6 +515,14 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             }
             break;
         }
+        case SccKind: {
+            if (CalculateCondition(ctx.Registers, Cond_)) {
+                SAFE_CALL(Dst_.WriteByte(ctx, 0xFF));
+            } else {
+                SAFE_CALL(Dst_.WriteByte(ctx, 0x00));
+            }
+            break;
+        }
         case BsrKind: {
             pushStack(ctx.Registers.PC);
             displaceProgramCounter();
@@ -1147,6 +1155,11 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
+    }
+    else if (applyMask(0b1111'0000'1100'0000) == 0b0101'0000'1100'0000) {
+        const auto cond = static_cast<ECondition>(getBits(8, 4));
+        PARSE_TARGET_WITH_SIZE_SAFE(Byte);
+        inst.SetKind(SccKind).SetCondition(cond).SetDst(*dst);
     }
     else if (applyMask(0b1111'0000'0000'0000) == 0b0101'0000'0000'0000) {
         PARSE_TARGET_SAFE;

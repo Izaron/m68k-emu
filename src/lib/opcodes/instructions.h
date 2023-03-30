@@ -66,6 +66,7 @@ public:
         RteKind,            // RTE
         RtrKind,            // RTR
         RtsKind,            // RTS
+        SccKind,            // Scc
         SubKind,            // SUB
         SubaKind,           // SUBA
         SubiKind,           // SUBI
