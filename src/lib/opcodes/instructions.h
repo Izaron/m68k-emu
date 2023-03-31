@@ -37,6 +37,7 @@ public:
         EoriToCcrKind,      // EORItoCCR
         EoriToSrKind,       // EORItoSR
         ExgKind,            // EXG
+        ExtKind,            // EXT
         JmpKind,            // JMP
         JsrKind,            // JSR
         LeaKind,            // LEA

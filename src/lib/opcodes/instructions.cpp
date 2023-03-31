@@ -714,6 +714,25 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             SAFE_CALL(Src_.WriteLong(ctx, *dstVal));
             break;
         }
+        case ExtKind: {
+            TLong val;
+            if (Size_ == Word) {
+                SAFE_DECLARE(dstVal, Dst_.ReadWord(ctx));
+                const TWord ext = *dstVal & (1 << 7) ? 0xFF : 0x00;
+                val = (ext << 8) | (*dstVal & 0xFF);
+                SAFE_CALL(Dst_.WriteWord(ctx, val));
+            } else /* Size_ == Long */ {
+                SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
+                const TLong ext = *dstVal & (1 << 15) ? 0xFFFF : 0x0000;
+                val = (ext << 16) | (*dstVal & 0xFFFF);
+                SAFE_CALL(Dst_.WriteLong(ctx, val));
+            }
+            ctx.Registers.SetNegativeFlag(GetMsb(val, Size_));
+            ctx.Registers.SetZeroFlag(IsZero(val, Size_));
+            ctx.Registers.SetOverflowFlag(0);
+            ctx.Registers.SetCarryFlag(0);
+            break;
+        }
         case LinkKind: {
             SAFE_DECLARE(dstVal, Dst_.ReadLong(ctx));
             auto& sp = ctx.Registers.GetStackPointer();
@@ -1271,6 +1290,10 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
             dst.SetKind(TTarget::DataRegisterKind);
         }
         inst.SetKind(ExgKind).SetSrc(src).SetDst(dst);
+    }
+    else if (applyMask(0b1111'1111'1011'1000) == 0b0100'1000'1000'0000) {
+        auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3));
+        inst.SetKind(ExtKind).SetDst(dst).SetSize(getBit(6) ? Long : Word);
     }
     else if (applyMask(0b1111'1111'1111'1000) == 0b0100'1110'0101'0000) {
         auto dst = TTarget{}.SetKind(TTarget::AddressRegisterKind).SetIndex(getBits(0, 3));
