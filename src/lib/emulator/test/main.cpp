@@ -272,7 +272,7 @@ int main() {
 
     const auto shouldRunTest = [](int index) {
         if (index >= 1 && index <= 26) return true;
-        if (index >= 28 && index <= 35) return true;
+        if (index >= 28 && index <= 36) return true;
         if (index >= 39 && index <= 64) return true;
         if (index >= 69 && index <= 71) return true;
         if (index >= 75 && index <= 106) return true;

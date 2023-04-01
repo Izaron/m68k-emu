@@ -508,9 +508,27 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         case BccKind: {
             if (CalculateCondition(ctx.Registers, Cond_)) {
                 displaceProgramCounter();
-
                 if (ctx.Registers.PC & 1) {
                     return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
+                }
+            }
+            break;
+        }
+        case DbccKind: {
+            if (!CalculateCondition(ctx.Registers, Cond_)) {
+                SAFE_DECLARE(dstVal, Dst_.ReadWord(ctx));
+                TSignedWord counter = *dstVal;
+                --counter;
+                SAFE_CALL(Dst_.WriteWord(ctx, counter));
+                if (counter != -1) {
+                    // Dirty hack because BDcc has special displacement
+                    if (static_cast<TSignedWord>(Data_) >= 0) {
+                        ctx.Registers.PC -= 2;
+                    }
+                    displaceProgramCounter();
+                    if (ctx.Registers.PC & 1) {
+                        return TError{TError::UnalignedProgramCounter, "program counter set at %#04x", ctx.Registers.PC};
+                    }
                 }
             }
             break;
@@ -1204,6 +1222,12 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     }
     else if (*word == 0b0100'1110'0111'0001) {
         inst.SetKind(NopKind);
+    }
+    else if (applyMask(0b1111'0000'1111'1000) == 0b0101'0000'1100'1000) {
+        const auto cond = static_cast<ECondition>(getBits(8, 4));
+        auto dst = TTarget{}.SetKind(TTarget::DataRegisterKind).SetIndex(getBits(0, 3)).SetSize(Word);
+        READ_WORD_SAFE;
+        inst.SetKind(DbccKind).SetCondition(cond).SetDst(dst).SetData(*word).SetSize(Word);
     }
     else if (applyMask(0b1111'0000'1100'0000) == 0b0101'0000'1100'0000) {
         const auto cond = static_cast<ECondition>(getBits(8, 4));

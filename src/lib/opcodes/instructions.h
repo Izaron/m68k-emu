@@ -32,6 +32,7 @@ public:
         CmpaKind,           // CMPA
         CmpiKind,           // CMPI
         CmpmKind,           // CMPM
+        DbccKind,           // DBcc
         EorKind,            // EOR
         EoriKind,           // EORI
         EoriToCcrKind,      // EORItoCCR
