@@ -222,9 +222,11 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
         }
     };
 
+    std::size_t incCount = 1;
+
     const auto tryIncAddress = [&](TTarget& target, bool hasFlag, bool& usedFlag) {
         if (hasFlag && !usedFlag) {
-            target.TryIncrementAddress(ctx);
+            target.TryIncrementAddress(ctx, incCount);
         }
         usedFlag = true;
     };
@@ -234,6 +236,13 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
 
     bool usedDstInc = false;
     const auto tryIncAddressDst = [&]() { return tryIncAddress(Dst_, HasDst_, usedDstInc); };
+
+    if (HasSrc_) {
+        Src_.SetIncOrDecCount(1);
+    }
+    if (HasDst_) {
+        Dst_.SetIncOrDecCount(1);
+    }
 
     switch (Kind_) {
         case AbcdKind: {
@@ -689,6 +698,65 @@ std::optional<TError> TInstruction::Execute(NEmulator::TContext ctx) {
             ctx.Registers.PC = tmp;
 
             SAFE_CALL(Dst_.WriteLong(ctx, src));
+            break;
+        }
+        case MovemKind: {
+            const auto hasBit = [&](std::size_t i) {
+                return Data_ & (1 << i);
+            };
+
+            const auto getReg = [&](std::size_t i) -> TLong& {
+                if (i <= 7) {
+                    return ctx.Registers.D[i];
+                } else if (i <= 14) {
+                    return ctx.Registers.A[i - 8];
+                } else {
+                    return ctx.Registers.GetStackPointer();
+                }
+            };
+
+            if (HasSrc_) {
+                std::size_t regCount = __builtin_popcount(Data_);
+                incCount = regCount;
+                SAFE_DECLARE(dataOrErr, Src_.Read(ctx, regCount * Size_));
+                auto& data = *dataOrErr;
+
+                std::size_t curPos = 0;
+                for (std::size_t i = 0; i < 16; ++i) {
+                    if (hasBit(i)) {
+                        // a corner case: don't write to the postincrement register
+                        if (i < 8 || Src_.GetKind() != TTarget::AddressIncrementKind || i - 8 != Src_.GetIndex()) {
+                            if (Size_ == Word) {
+                                TSignedLong l = static_cast<TSignedWord>((data[curPos] << 8) + data[curPos + 1]);
+                                getReg(i) = l;
+                            } else {
+                                getReg(i) = (data[curPos] << 24) + (data[curPos + 1] << 16) + (data[curPos + 2] << 8) + data[curPos + 3];
+                            }
+                        }
+                        curPos += Size_;
+                    }
+                }
+            } else {
+                TDataHolder data;
+                for (std::size_t i = 0; i < 16; ++i) {
+                    bool has = hasBit(i);
+                    if (Dst_.GetKind() == TTarget::AddressDecrementKind) {
+                        has = hasBit(15 - i);
+                    }
+
+                    if (has) {
+                        const TLong reg = getReg(i);
+                        if (Size_ == Long) {
+                            data.push_back((reg >> 24) & 0xFF);
+                            data.push_back((reg >> 16) & 0xFF);
+                        }
+                        data.push_back((reg >> 8) & 0xFF);
+                        data.push_back(reg & 0xFF);
+                    }
+                }
+                Dst_.SetIncOrDecCount(__builtin_popcount(Data_));
+                SAFE_CALL(Dst_.Write(ctx, data));
+            }
             break;
         }
         case MoveqKind: {
@@ -1163,7 +1231,7 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
     };
 
     /*
-     * Moves: MOVE, MOVEA, MOVEQ, MOVEtoCCR, MOVE[to|from][SR|USP]
+     * Moves: MOVE, MOVEM, MOVEA, MOVEQ, MOVEtoCCR, MOVE[to|from][SR|USP]
      */
     const auto tryParseMoveOpcodes = [&]() -> tl::expected<bool, TError> {
         // MOVE/MOVEA
@@ -1183,6 +1251,19 @@ tl::expected<TInstruction, TError> TInstruction::Decode(NEmulator::TContext ctx)
                 inst.SetKind(kind).SetSrc(*src).SetDst(*dst).SetSize(*size).SetData(pc);
                 return true;
             }
+        }
+        // MOVEM
+        if (applyMask(0b1111'1011'1000'0000) == 0b0100'1000'1000'0000) {
+            READ_WORD_SAFE;
+            const auto size = getBit(6) ? Long : Word;
+            PARSE_TARGET_WITH_SIZE_SAFE(size);
+            inst.SetKind(MovemKind).SetData(*word).SetSize(size);
+            if (getBit(10)) {
+                inst.SetSrc(*dst);
+            } else {
+                inst.SetDst(*dst);
+            }
+            return true;
         }
         // MOVEQ
         if (applyMask(0b1111'0001'0000'0000) == 0b0111'0000'0000'0000) {

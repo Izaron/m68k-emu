@@ -29,8 +29,9 @@ public:
     TTarget& SetAddress(TLong address);
 
     // pre-work and post-work
-    void TryDecrementAddress(NEmulator::TContext ctx);
-    void TryIncrementAddress(NEmulator::TContext ctx);
+    void SetIncOrDecCount(std::size_t count);
+    void TryDecrementAddress(NEmulator::TContext ctx, std::size_t count = 1);
+    void TryIncrementAddress(NEmulator::TContext ctx, std::size_t count = 1);
 
     // helper methods
     TLong GetEffectiveAddress(NEmulator::TContext ctx) const;
@@ -61,7 +62,9 @@ private:
     TWord ExtWord0_;
     TWord ExtWord1_;
     TLong Address_;
+
     bool AlreadyDecremented_;
+    std::size_t IncOrDecCount_;
 };
 
 } // namespace NOpcodes

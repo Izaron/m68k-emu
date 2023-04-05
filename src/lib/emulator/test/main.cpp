@@ -35,7 +35,8 @@ public:
     }
 
     tl::expected<TDataHolder, TError> Read(TAddressType addr, TAddressType size) override {
-        ferr << "Read memory " << (addr & 0xFFFFFF) << " with size " << size << std::endl;
+        addr &= 0xFFFFFF;
+        ferr << "Read memory " << addr << " with size " << size << std::endl;
 
         if (size > 1 && addr % 2 != 0) {
             return tl::unexpected<TError>(TError::UnalignedMemoryRead, "memory read at address %#08x of size %d", addr, size);
@@ -273,7 +274,7 @@ int main() {
     const auto shouldRunTest = [](int index) {
         if (index >= 1 && index <= 26) return true;
         if (index >= 28 && index <= 36) return true;
-        if (index >= 39 && index <= 64) return true;
+        if (index >= 39 && index <= 66) return true;
         if (index >= 69 && index <= 71) return true;
         if (index >= 75 && index <= 106) return true;
         if (index >= 108) return true;

@@ -72,22 +72,28 @@ TTarget& TTarget::SetAddress(TLong address) {
     return *this;
 }
 
-void TTarget::TryDecrementAddress(NEmulator::TContext ctx) {
+void TTarget::SetIncOrDecCount(std::size_t count) {
+    IncOrDecCount_ = count;
+}
+
+void TTarget::TryDecrementAddress(NEmulator::TContext ctx, std::size_t count) {
     if (Kind_ == AddressDecrementKind && !AlreadyDecremented_) {
         auto& reg = GetAReg(ctx.Registers, Index_);
 
         // stack pointer should be aligned to a word boundary
-        reg -= (Index_ == 7) ? std::max((int)Size_, 2) : Size_;
+        TLong diff = Size_ * count;
+        reg -= (Index_ == 7) ? std::max((int)diff, 2) : diff;
     }
     AlreadyDecremented_ = true;
 }
 
-void TTarget::TryIncrementAddress(NEmulator::TContext ctx) {
+void TTarget::TryIncrementAddress(NEmulator::TContext ctx, std::size_t count) {
     if (Kind_ == AddressIncrementKind) {
         auto& reg = GetAReg(ctx.Registers, Index_);
 
         // stack pointer should be aligned to a word boundary
-        reg += (Index_ == 7) ? std::max((int)Size_, 2) : Size_;
+        TLong diff = Size_ * count;
+        reg += (Index_ == 7) ? std::max((int)diff, 2) : diff;
     }
 }
 
@@ -117,7 +123,7 @@ TLong TTarget::GetEffectiveAddress(NEmulator::TContext ctx) const {
 }
 
 tl::expected<TDataHolder, TError> TTarget::Read(NEmulator::TContext ctx, TAddressType size) {
-    TryDecrementAddress(ctx);
+    TryDecrementAddress(ctx, IncOrDecCount_);
 
     const auto readRegister = [size](TLong reg) {
         TDataHolder data;
@@ -193,7 +199,7 @@ tl::expected<TLong, TError> TTarget::ReadLong(NEmulator::TContext ctx) {
 }
 
 std::optional<TError> TTarget::Write(NEmulator::TContext ctx, TDataView data) {
-    TryDecrementAddress(ctx);
+    TryDecrementAddress(ctx, IncOrDecCount_);
 
     const auto writeRegister = [data](TLong& reg) {
         TLong shift = 0;
